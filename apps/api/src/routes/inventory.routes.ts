@@ -67,6 +67,20 @@ inventoryRouter.get(
   requireRole("WAREHOUSE_OPERATOR", "SELLER", "ADMIN"),
   async (req: Request, res: Response) => {
     const skuId = String(req.params.skuId);
+    if (req.user!.role === "SELLER") {
+      const sku = await prisma.sku.findUnique({
+        where: { id: skuId },
+        include: { product: { select: { sellerId: true } } },
+      });
+      if (!sku) {
+        res.status(404).json({ error: "SKU not found" });
+        return;
+      }
+      if (sku.product.sellerId !== req.user!.sellerId) {
+        res.status(403).json({ error: "Forbidden: SKU ownership required" });
+        return;
+      }
+    }
     const inventories = await prisma.inventory.findMany({
       where: { skuId },
       include: {

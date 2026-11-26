@@ -53,43 +53,70 @@ postOrderRouter.post(
       return;
     }
 
-    const existing = await prisma.refund.findUnique({
-      where: { idempotencyKey: parsed.data.idempotencyKey },
-    });
-    if (existing) {
-      res.status(200).json({ refund: existing, deduplicated: true });
-      return;
-    }
-
     const paymentId = String(req.params.paymentId);
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: { refunds: true },
-    });
-    if (!payment) {
-      res.status(404).json({ error: "Payment not found" });
-      return;
-    }
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.refund.findUnique({
+          where: { idempotencyKey: parsed.data.idempotencyKey },
+        });
+        if (existing) {
+          return { refund: existing, deduplicated: true };
+        }
 
-    const alreadyRefunded = payment.refunds.reduce(
-      (sum, r) => sum + Number(r.amount),
-      0
-    );
-    if (alreadyRefunded + parsed.data.amount > Number(payment.amount)) {
-      res.status(409).json({ error: "Refund exceeds captured payment amount" });
-      return;
-    }
+        const locked = await tx.$queryRaw<
+          Array<{ id: string; amount: string; status: string }>
+        >`
+          SELECT id, amount::text, status::text FROM "Payment"
+          WHERE id = ${paymentId}
+          FOR UPDATE
+        `;
+        if (locked.length === 0) {
+          throw new Error("PAYMENT_NOT_FOUND");
+        }
+        if (locked[0].status !== "CAPTURED") {
+          throw new Error("PAYMENT_NOT_CAPTURED");
+        }
 
-    const refund = await prisma.refund.create({
-      data: {
-        paymentId,
-        returnId: parsed.data.returnId,
-        amount: parsed.data.amount.toFixed(2),
-        status: "PROCESSED",
-        idempotencyKey: parsed.data.idempotencyKey,
-      },
-    });
-    res.status(201).json({ refund });
+        const existingRefunds = await tx.refund.findMany({
+          where: { paymentId },
+          select: { amount: true },
+        });
+        const alreadyRefunded = existingRefunds.reduce(
+          (sum, r) => sum + Number(r.amount),
+          0
+        );
+        if (alreadyRefunded + parsed.data.amount > Number(locked[0].amount)) {
+          throw new Error("OVER_REFUND");
+        }
+
+        const refund = await tx.refund.create({
+          data: {
+            paymentId,
+            returnId: parsed.data.returnId,
+            amount: parsed.data.amount.toFixed(2),
+            status: "PROCESSED",
+            idempotencyKey: parsed.data.idempotencyKey,
+          },
+        });
+        return { refund, deduplicated: false };
+      });
+
+      res.status(result.deduplicated ? 200 : 201).json(result);
+    } catch (err) {
+      if (err instanceof Error && err.message === "PAYMENT_NOT_FOUND") {
+        res.status(404).json({ error: "Payment not found" });
+        return;
+      }
+      if (err instanceof Error && err.message === "PAYMENT_NOT_CAPTURED") {
+        res.status(409).json({ error: "Only CAPTURED payments can be refunded" });
+        return;
+      }
+      if (err instanceof Error && err.message === "OVER_REFUND") {
+        res.status(409).json({ error: "Refund exceeds captured payment amount" });
+        return;
+      }
+      throw err;
+    }
   }
 );
 

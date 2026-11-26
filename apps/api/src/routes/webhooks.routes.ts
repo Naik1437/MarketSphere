@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { redis } from "../lib/redis";
 
 export const webhooksRouter = Router();
 
@@ -34,8 +34,39 @@ const paymentWebhookSchema = z.object({
 const shippingWebhookSchema = z.object({
   eventId: z.string().min(4).max(128),
   trackingNumber: z.string().min(4),
-  eventType: z.enum(["shipment.in_transit", "shipment.delivered", "shipment.failed"]),
+  eventType: z.enum([
+    "shipment.in_transit",
+    "shipment.delivered",
+    "shipment.failed",
+  ]),
 });
+
+async function recordWebhookEvent(
+  provider: string,
+  eventId: string,
+  eventType: string
+): Promise<boolean> {
+  try {
+    await prisma.webhookEvent.create({
+      data: {
+        provider,
+        eventId,
+        eventType,
+        status: "PROCESSED",
+        processedAt: new Date(),
+      },
+    });
+    return true;
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      return false;
+    }
+    throw err;
+  }
+}
 
 webhooksRouter.post("/payment", async (req: Request, res: Response) => {
   const sig = req.header("x-webhook-signature");
@@ -51,9 +82,12 @@ webhooksRouter.post("/payment", async (req: Request, res: Response) => {
     return;
   }
 
-  const dedupKey = `wh:pay:${parsed.data.eventId}`;
-  const acquired = await redis.set(dedupKey, "1", "EX", 86400, "NX");
-  if (!acquired) {
+  const isNew = await recordWebhookEvent(
+    "payment",
+    parsed.data.eventId,
+    parsed.data.eventType
+  );
+  if (!isNew) {
     res.status(200).json({ ok: true, deduplicated: true });
     return;
   }
@@ -91,9 +125,12 @@ webhooksRouter.post("/shipping", async (req: Request, res: Response) => {
     return;
   }
 
-  const dedupKey = `wh:ship:${parsed.data.eventId}`;
-  const acquired = await redis.set(dedupKey, "1", "EX", 86400, "NX");
-  if (!acquired) {
+  const isNew = await recordWebhookEvent(
+    "shipping",
+    parsed.data.eventId,
+    parsed.data.eventType
+  );
+  if (!isNew) {
     res.status(200).json({ ok: true, deduplicated: true });
     return;
   }

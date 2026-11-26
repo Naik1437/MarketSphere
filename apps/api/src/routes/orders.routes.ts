@@ -52,7 +52,12 @@ ordersRouter.post(
     const { warehouseId, promotionCode, idempotencyKey, items } = parsed.data;
 
     const existingOrder = await prisma.order.findUnique({
-      where: { idempotencyKey },
+      where: {
+        customerId_idempotencyKey: {
+          customerId: req.user!.sub,
+          idempotencyKey,
+        },
+      },
       include: { items: true, payments: true, reservations: true },
     });
     if (existingOrder) {
@@ -186,39 +191,51 @@ ordersRouter.post(
           reservations.push(r);
         }
 
-        const payAuth = await paymentProvider.authorize({
-          orderId: order.id,
-          amount: totalAmount,
-          currency: "INR",
-          idempotencyKey,
-        });
-
         const payment = await tx.payment.create({
           data: {
             orderId: order.id,
-            provider: payAuth.provider,
-            providerPaymentId: payAuth.providerPaymentId,
+            provider: "pending",
             amount: totalAmount.toFixed(2),
             currency: "INR",
-            status: payAuth.status,
-            idempotencyKey: `pay:${idempotencyKey}`,
+            status: "PENDING",
+            idempotencyKey: `pay:${req.user!.sub}:${idempotencyKey}`,
           },
         });
 
-        const confirmedOrder = await tx.order.update({
-          where: { id: order.id },
-          data: { status: payAuth.status === "CAPTURED" ? "CONFIRMED" : "PENDING" },
+        return { order, payment, reservations, totalAmount };
+      });
+
+      // External payment authorization outside DB transaction
+      const payAuth = await paymentProvider.authorize({
+        orderId: result.order.id,
+        amount: result.totalAmount,
+        currency: "INR",
+        idempotencyKey: `${req.user!.sub}:${idempotencyKey}`,
+      });
+
+      const finalizedOrder = await prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: result.payment.id },
+          data: {
+            provider: payAuth.provider,
+            providerPaymentId: payAuth.providerPaymentId,
+            status: payAuth.status,
+          },
+        });
+        return tx.order.update({
+          where: { id: result.order.id },
+          data: {
+            status: payAuth.status === "CAPTURED" ? "CONFIRMED" : "CANCELLED",
+          },
           include: { items: true, payments: true, reservations: true },
         });
-
-        return { order: confirmedOrder, payment, reservations };
       });
 
       for (const r of result.reservations) {
         await scheduleReservationExpiry(r.id, 15 * 60 * 1000).catch(() => {});
       }
 
-      res.status(201).json({ order: result.order });
+      res.status(201).json({ order: finalizedOrder });
     } catch (err) {
       if (err instanceof InsufficientStockError) {
         res.status(409).json({ error: err.message });
@@ -241,18 +258,23 @@ ordersRouter.get(
   "/",
   authenticate,
   async (req: Request, res: Response) => {
+    const isSeller = req.user!.role === "SELLER";
+    const sellerId = req.user!.sellerId ?? "";
     const where =
       req.user!.role === "CUSTOMER"
         ? { customerId: req.user!.sub }
-        : req.user!.role === "SELLER"
-          ? { items: { some: { sellerId: req.user!.sellerId ?? "" } } }
+        : isSeller
+          ? { items: { some: { sellerId } } }
           : {};
 
     const orders = await prisma.order.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: { items: true, shipments: true },
+      include: {
+        items: isSeller ? { where: { sellerId } } : true,
+        shipments: true,
+      },
     });
     res.status(200).json({ orders });
   }
@@ -262,13 +284,15 @@ ordersRouter.get(
   "/:orderId",
   authenticate,
   async (req: Request, res: Response) => {
+    const isSeller = req.user!.role === "SELLER";
+    const sellerId = req.user!.sellerId ?? "";
     const order = await prisma.order.findUnique({
       where: { id: String(req.params.orderId) },
       include: {
-        items: true,
-        payments: true,
+        items: isSeller ? { where: { sellerId } } : true,
+        payments: !isSeller,
         shipments: true,
-        reservations: true,
+        reservations: !isSeller,
       },
     });
     if (!order) {
@@ -281,6 +305,11 @@ ordersRouter.get(
       order.customerId !== req.user!.sub
     ) {
       res.status(403).json({ error: "Forbidden: order ownership required" });
+      return;
+    }
+
+    if (isSeller && order.items.length === 0) {
+      res.status(403).json({ error: "Forbidden: seller order ownership required" });
       return;
     }
 
@@ -410,6 +439,26 @@ ordersRouter.patch(
     }
 
     const shipmentId = String(req.params.shipmentId);
+    const existing = await prisma.shipment.findUnique({ where: { id: shipmentId } });
+    if (!existing) {
+      res.status(404).json({ error: "Shipment not found" });
+      return;
+    }
+
+    const allowedShipTransitions: Record<string, string[]> = {
+      PENDING: ["LABEL_CREATED", "IN_TRANSIT", "FAILED"],
+      LABEL_CREATED: ["IN_TRANSIT", "FAILED"],
+      IN_TRANSIT: ["DELIVERED", "FAILED"],
+      DELIVERED: [],
+      FAILED: [],
+    };
+    if (!allowedShipTransitions[existing.status]?.includes(parsed.data.status)) {
+      res.status(409).json({
+        error: `Invalid shipment transition from ${existing.status} to ${parsed.data.status}`,
+      });
+      return;
+    }
+
     const updated = await prisma.shipment.update({
       where: { id: shipmentId },
       data: {

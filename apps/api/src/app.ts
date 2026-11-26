@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { env } from "./config/env";
@@ -16,6 +17,37 @@ export const app = express();
 
 app.use(cors({ origin: env.CORS_ORIGIN }));
 app.use(express.json());
+
+let totalRequests = 0;
+app.use((req: Request, res: Response, next: NextFunction) => {
+  totalRequests += 1;
+  const reqId = req.header("x-request-id") || crypto.randomUUID();
+  res.setHeader("x-request-id", reqId);
+  const start = Date.now();
+  res.on("finish", () => {
+    if (env.NODE_ENV !== "test") {
+      console.log(
+        JSON.stringify({
+          level: "info",
+          reqId,
+          method: req.method,
+          path: req.path,
+          status: res.statusCode,
+          durationMs: Date.now() - start,
+        })
+      );
+    }
+  });
+  next();
+});
+
+app.get("/metrics", (_req: Request, res: Response) => {
+  res.status(200).json({
+    service: "marketsphere-api",
+    totalRequests,
+    uptimeSeconds: Math.round(process.uptime()),
+  });
+});
 
 app.get("/health", async (_req: Request, res: Response) => {
   const checks: { database: string; redis: string } = {
