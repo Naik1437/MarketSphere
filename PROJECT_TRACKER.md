@@ -24,10 +24,10 @@ Foundation initialized. This tracker records requirement and assessment progress
 - **A06** FastAPI recommendation service — Implemented (personalized + cold-start fallback, connected to storefront)
 - **A07** Inventory reservation engine — Implemented (`FOR UPDATE` concurrency, stock ledger, BullMQ expiry worker)
 - **A08** Commerce third-party integrations — Webhook HMAC verification & Redis deduplication implemented; payment/shipping/email/storage in Local Simulation mode (₹0 strict)
-- **A09** Docker marketplace environment — Foundation only
-- **A10** Git collaboration and reviews — Foundation only
-- **A11** Marketplace CI/CD — Foundation only
-- **A12** Commerce test suite — API/DB integration suite (11/11) and Playwright E2E suites (`marketplace.mjs` 6/6, `gaps.mjs` 6/6) passing
-- **A13** Marketplace API documentation — Pending
-- **A14** Marketplace deployment — Pending
-- **A15** Marketplace incident simulation — Pending
+- **A09** Docker marketplace environment — Complete (`docker-compose.yml`, internal `data_net`, persistent volumes, healthchecks)
+- **A10** Git collaboration and reviews — Complete locally (`.gitignore`, PR template, `CODEOWNERS`); remote branch protection pending GitHub push
+- **A11** Marketplace CI/CD — Configured (`.github/workflows/ci.yml` with tests, typecheck, secret scan, Docker build, GHCR, staging/prod gates); not yet executed on GitHub
+- **A12** Commerce test suite — Passing (API/DB 11/11, Webhooks 2/2, Python 4/4, Playwright E2E `marketplace.mjs` 6/6 & `gaps.mjs` 6/6)
+- **A13** Marketplace API documentation — Complete (`docs/openapi.json`, `docs/marketsphere.postman_collection.json`)
+- **A14** Marketplace deployment — Deployment artifacts ready (`deploy/nginx/marketsphere.conf`, `deploy/scripts/backup.sh`, `deploy/scripts/restore.sh`); live cloud hosting pending (₹0 strict)
+- **A15** Marketplace incident simulation — Complete (`docs/INCIDENT_RUNBOOK.md` with 6 verified simulations)

@@ -1,0 +1,40 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MarketSphere API",
+    "version": "1.0.0",
+    "description": "Multi-Vendor Commerce, Inventory & Order Platform API"
+  },
+  "servers": [
+    { "url": "http://localhost:4000", "description": "Core Express API" },
+    { "url": "http://localhost:8000", "description": "Python FastAPI Engine" }
+  ],
+  "paths": {
+    "/health": { "get": { "summary": "API Health & DB/Redis Readiness", "responses": { "200": { "description": "Healthy" } } } },
+    "/api/v1/auth/login": { "post": { "summary": "Login with email and password", "responses": { "200": { "description": "JWT access & refresh tokens" } } } },
+    "/api/v1/auth/refresh": { "post": { "summary": "Rotate refresh token", "responses": { "200": { "description": "New token pair" } } } },
+    "/api/v1/auth/logout": { "post": { "summary": "Revoke refresh token", "responses": { "200": { "description": "Logged out" } } } },
+    "/api/v1/auth/me": { "get": { "summary": "Current user profile", "responses": { "200": { "description": "User profile" } } } },
+    "/api/v1/sellers": { "get": { "summary": "List sellers (Admin)", "responses": { "200": { "description": "Seller list" } } } },
+    "/api/v1/sellers/onboard": { "post": { "summary": "Onboard seller", "responses": { "201": { "description": "Seller created" } } } },
+    "/api/v1/sellers/{sellerId}/status": { "patch": { "summary": "Approve/suspend seller (Admin)", "responses": { "200": { "description": "Updated" } } } },
+    "/api/v1/products": {
+      "get": { "summary": "Search & paginate active products", "responses": { "200": { "description": "Product list" } } },
+      "post": { "summary": "Create product (Seller)", "responses": { "201": { "description": "Created" } } }
+    },
+    "/api/v1/products/{productId}/skus": { "post": { "summary": "Add SKU to product", "responses": { "201": { "description": "SKU created" } } } },
+    "/api/v1/inventory/adjust": { "post": { "summary": "Adjust warehouse inventory", "responses": { "200": { "description": "Adjusted" } } } },
+    "/api/v1/cart": { "get": { "summary": "Get customer cart", "responses": { "200": { "description": "Cart" } } } },
+    "/api/v1/cart/items": { "post": { "summary": "Add/update cart item", "responses": { "200": { "description": "Updated" } } } },
+    "/api/v1/orders/checkout": { "post": { "summary": "Transactional checkout & stock reservation", "responses": { "201": { "description": "Order confirmed" } } } },
+    "/api/v1/orders/{orderId}/shipments": { "post": { "summary": "Create shipment", "responses": { "201": { "description": "Shipment created" } } } },
+    "/api/v1/orders/shipments/{shipmentId}/status": { "patch": { "summary": "Update shipment status", "responses": { "200": { "description": "Updated" } } } },
+    "/api/v1/payments/{paymentId}/refunds": { "post": { "summary": "Idempotent refund", "responses": { "201": { "description": "Refunded" } } } },
+    "/api/v1/settlements/generate": { "post": { "summary": "Generate seller settlement (Admin)", "responses": { "201": { "description": "Settlement created" } } } },
+    "/api/v1/webhooks/payment": { "post": { "summary": "Signed payment webhook", "responses": { "200": { "description": "Processed or deduplicated" } } } },
+    "/api/v1/webhooks/shipping": { "post": { "summary": "Signed shipping webhook", "responses": { "200": { "description": "Processed or deduplicated" } } } },
+    "/api/v1/pricing/calculate": { "post": { "summary": "Python deterministic pricing & commission", "responses": { "200": { "description": "Calculated" } } } },
+    "/api/v1/catalog/normalize": { "post": { "summary": "Python bulk catalog normalization", "responses": { "200": { "description": "Normalized" } } } },
+    "/api/v1/recommendations": { "post": { "summary": "FastAPI product recommendations", "responses": { "200": { "description": "Recommendations" } } } }
+  }
+}
