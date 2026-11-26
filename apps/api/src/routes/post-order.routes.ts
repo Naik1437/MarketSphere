@@ -310,3 +310,50 @@ postOrderRouter.get(
     res.status(200).json({ overview: { users, sellers, products, orders } });
   }
 );
+
+postOrderRouter.post(
+  "/settlements/generate",
+  authenticate,
+  requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    const parsed = z
+      .object({ sellerId: z.string().min(1) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid settlement payload" });
+      return;
+    }
+
+    const { sellerId } = parsed.data;
+    const unsettled = await prisma.commission.findMany({
+      where: { sellerId, settlementId: null },
+    });
+
+    const totalAmount = unsettled.reduce(
+      (sum, c) => sum + Number(c.netSellerAmount),
+      0
+    );
+
+    const now = new Date();
+    const settlement = await prisma.$transaction(async (tx) => {
+      const created = await tx.settlement.create({
+        data: {
+          sellerId,
+          totalAmount: totalAmount.toFixed(2),
+          status: "PENDING",
+          periodStart: new Date(now.getTime() - 30 * 86400_000),
+          periodEnd: now,
+        },
+      });
+      if (unsettled.length > 0) {
+        await tx.commission.updateMany({
+          where: { id: { in: unsettled.map((c) => c.id) } },
+          data: { settlementId: created.id },
+        });
+      }
+      return created;
+    });
+
+    res.status(201).json({ settlement });
+  }
+);

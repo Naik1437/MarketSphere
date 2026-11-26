@@ -60,6 +60,16 @@ export default function AdminPage() {
     onError: (err) => setMsg(err instanceof Error ? err.message : "Failed"),
   });
 
+  const generateSettlement = useMutation({
+    mutationFn: (sellerId: string) =>
+      apiFetch("/api/v1/settlements/generate", {
+        method: "POST",
+        body: JSON.stringify({ sellerId }),
+      }),
+    onSuccess: () => setMsg("Settlement generated."),
+    onError: (err) => setMsg(err instanceof Error ? err.message : "Failed"),
+  });
+
   function handlePromo(e: FormEvent) {
     e.preventDefault();
     createPromo.mutate({
@@ -103,6 +113,13 @@ export default function AdminPage() {
                 </span>
               </div>
               <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => generateSettlement.mutate(s.id)}
+                  className="rounded border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50"
+                >
+                  Generate Settlement
+                </button>
                 {s.status !== "ACTIVE" && (
                   <button
                     type="button"

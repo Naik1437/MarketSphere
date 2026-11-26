@@ -27,7 +27,7 @@ Foundation initialized. This tracker records requirement and assessment progress
 - **A09** Docker marketplace environment — Foundation only
 - **A10** Git collaboration and reviews — Foundation only
 - **A11** Marketplace CI/CD — Foundation only
-- **A12** Commerce test suite — API/DB integration suite (11/11) and Playwright E2E browser suite (6/6 flows) passing
+- **A12** Commerce test suite — API/DB integration suite (11/11) and Playwright E2E suites (`marketplace.mjs` 6/6, `gaps.mjs` 6/6) passing
 - **A13** Marketplace API documentation — Pending
 - **A14** Marketplace deployment — Pending
 - **A15** Marketplace incident simulation — Pending

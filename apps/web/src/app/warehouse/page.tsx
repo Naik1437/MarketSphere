@@ -15,6 +15,12 @@ interface Order {
   orderNumber: string;
   status: string;
   totalAmount: string;
+  shipments: Array<{
+    id: string;
+    carrier: string;
+    trackingNumber: string | null;
+    status: string;
+  }>;
 }
 
 export default function WarehousePage() {
@@ -59,6 +65,25 @@ export default function WarehousePage() {
       }),
     onSuccess: () => {
       setMsg("Shipment created (local stub label).");
+      qc.invalidateQueries({ queryKey: ["warehouse-orders"] });
+    },
+    onError: (err) => setMsg(err instanceof Error ? err.message : "Failed"),
+  });
+
+  const updateShipmentStatus = useMutation({
+    mutationFn: ({
+      shipmentId,
+      status,
+    }: {
+      shipmentId: string;
+      status: "IN_TRANSIT" | "DELIVERED";
+    }) =>
+      apiFetch(`/api/v1/orders/shipments/${shipmentId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => {
+      setMsg("Shipment status updated.");
       qc.invalidateQueries({ queryKey: ["warehouse-orders"] });
     },
     onError: (err) => setMsg(err instanceof Error ? err.message : "Failed"),
@@ -135,6 +160,41 @@ export default function WarehousePage() {
               <div>
                 <span className="font-medium">{o.orderNumber}</span>{" "}
                 <span className="text-xs text-slate-500">[{o.status}]</span>
+                {o.shipments?.map((s) => (
+                  <div key={s.id} className="mt-1 flex items-center gap-2 text-xs text-slate-600">
+                    <span>
+                      {s.carrier} ({s.trackingNumber || "pending"}) [{s.status}]
+                    </span>
+                    {s.status === "LABEL_CREATED" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateShipmentStatus.mutate({
+                            shipmentId: s.id,
+                            status: "IN_TRANSIT",
+                          })
+                        }
+                        className="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50"
+                      >
+                        Mark In Transit
+                      </button>
+                    )}
+                    {s.status === "IN_TRANSIT" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateShipmentStatus.mutate({
+                            shipmentId: s.id,
+                            status: "DELIVERED",
+                          })
+                        }
+                        className="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50"
+                      >
+                        Mark Delivered
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
               {["CONFIRMED", "PROCESSING"].includes(o.status) && effectiveWhId && (
                 <button
