@@ -90,6 +90,50 @@ catalogRouter.get(
   }
 );
 
+catalogRouter.get("/recommendations", async (_req: Request, res: Response) => {
+  const products = await prisma.product.findMany({
+    where: { status: "ACTIVE" },
+    take: 20,
+    include: { skus: { where: { isActive: true }, take: 1 } },
+  });
+
+  const catalog = products
+    .filter((p) => p.skus.length > 0)
+    .map((p) => ({
+      sku_code: p.skus[0].skuCode,
+      name: p.name,
+      category: p.category,
+      price: Number(p.skus[0].price),
+      popularity: 0.9,
+    }));
+
+  const pyUrl = process.env.PYTHON_ENGINE_URL || "http://python-engine:8000";
+  try {
+    const pyRes = await fetch(`${pyUrl}/api/v1/recommendations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalog, limit: 4 }),
+      signal: AbortSignal.timeout(1500),
+    });
+    if (pyRes.ok) {
+      const data = await pyRes.json();
+      res.status(200).json(data);
+      return;
+    }
+  } catch {
+    // Fallback to DB catalog slice
+  }
+
+  res.status(200).json({
+    strategy: "db_fallback",
+    items: catalog.slice(0, 4).map((c) => ({
+      ...c,
+      score: c.popularity,
+      reason: "Active marketplace catalog",
+    })),
+  });
+});
+
 catalogRouter.get("/:productId", async (req: Request, res: Response) => {
   const product = await prisma.product.findUnique({
     where: { id: String(req.params.productId) },

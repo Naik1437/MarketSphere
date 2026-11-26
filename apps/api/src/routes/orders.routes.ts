@@ -394,6 +394,19 @@ ordersRouter.post(
       return;
     }
 
+    const existingShipment = await prisma.shipment.findFirst({
+      where: {
+        orderId,
+        warehouseId: warehouse.id,
+        carrier: parsed.data.carrier,
+        status: "LABEL_CREATED",
+      },
+    });
+    if (existingShipment) {
+      res.status(409).json({ error: "Duplicate active shipment for order/warehouse/carrier" });
+      return;
+    }
+
     const label = await shippingProvider.createLabel({
       orderId,
       warehouseCode: warehouse.code,

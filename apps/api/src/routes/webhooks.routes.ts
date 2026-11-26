@@ -41,28 +41,37 @@ const shippingWebhookSchema = z.object({
   ]),
 });
 
-async function recordWebhookEvent(
+async function acquireWebhookEvent(
   provider: string,
   eventId: string,
   eventType: string
-): Promise<boolean> {
+): Promise<"NEW" | "RETRY" | "DUPLICATE"> {
   try {
     await prisma.webhookEvent.create({
       data: {
         provider,
         eventId,
         eventType,
-        status: "PROCESSED",
-        processedAt: new Date(),
+        status: "PROCESSING",
       },
     });
-    return true;
+    return "NEW";
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      return false;
+      const existing = await prisma.webhookEvent.findUnique({
+        where: { provider_eventId: { provider, eventId } },
+      });
+      if (existing?.status === "FAILED") {
+        await prisma.webhookEvent.update({
+          where: { id: existing.id },
+          data: { status: "PROCESSING", attempts: { increment: 1 } },
+        });
+        return "RETRY";
+      }
+      return "DUPLICATE";
     }
     throw err;
   }
@@ -82,12 +91,12 @@ webhooksRouter.post("/payment", async (req: Request, res: Response) => {
     return;
   }
 
-  const isNew = await recordWebhookEvent(
+  const state = await acquireWebhookEvent(
     "payment",
     parsed.data.eventId,
     parsed.data.eventType
   );
-  if (!isNew) {
+  if (state === "DUPLICATE") {
     res.status(200).json({ ok: true, deduplicated: true });
     return;
   }
@@ -96,6 +105,12 @@ webhooksRouter.post("/payment", async (req: Request, res: Response) => {
     where: { providerPaymentId: parsed.data.providerPaymentId },
   });
   if (!payment) {
+    await prisma.webhookEvent.update({
+      where: {
+        provider_eventId: { provider: "payment", eventId: parsed.data.eventId },
+      },
+      data: { status: "FAILED" },
+    });
     res.status(404).json({ error: "Payment not found" });
     return;
   }
@@ -103,12 +118,25 @@ webhooksRouter.post("/payment", async (req: Request, res: Response) => {
   const nextStatus =
     parsed.data.eventType === "payment.captured" ? "CAPTURED" : "FAILED";
 
-  await prisma.payment.update({
-    where: { id: payment.id },
-    data: { status: nextStatus },
-  });
+  await prisma.$transaction([
+    prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: nextStatus },
+    }),
+    prisma.webhookEvent.update({
+      where: {
+        provider_eventId: { provider: "payment", eventId: parsed.data.eventId },
+      },
+      data: { status: "PROCESSED", processedAt: new Date() },
+    }),
+  ]);
 
-  res.status(200).json({ ok: true, deduplicated: false, status: nextStatus });
+  res.status(200).json({
+    ok: true,
+    deduplicated: false,
+    retried: state === "RETRY",
+    status: nextStatus,
+  });
 });
 
 webhooksRouter.post("/shipping", async (req: Request, res: Response) => {
@@ -125,12 +153,12 @@ webhooksRouter.post("/shipping", async (req: Request, res: Response) => {
     return;
   }
 
-  const isNew = await recordWebhookEvent(
+  const state = await acquireWebhookEvent(
     "shipping",
     parsed.data.eventId,
     parsed.data.eventType
   );
-  if (!isNew) {
+  if (state === "DUPLICATE") {
     res.status(200).json({ ok: true, deduplicated: true });
     return;
   }
@@ -139,6 +167,12 @@ webhooksRouter.post("/shipping", async (req: Request, res: Response) => {
     where: { trackingNumber: parsed.data.trackingNumber },
   });
   if (!shipment) {
+    await prisma.webhookEvent.update({
+      where: {
+        provider_eventId: { provider: "shipping", eventId: parsed.data.eventId },
+      },
+      data: { status: "FAILED" },
+    });
     res.status(404).json({ error: "Shipment not found" });
     return;
   }
@@ -150,10 +184,18 @@ webhooksRouter.post("/shipping", async (req: Request, res: Response) => {
         ? "IN_TRANSIT"
         : "FAILED";
 
-  await prisma.shipment.update({
-    where: { id: shipment.id },
-    data: { status: nextStatus },
-  });
+  await prisma.$transaction([
+    prisma.shipment.update({
+      where: { id: shipment.id },
+      data: { status: nextStatus },
+    }),
+    prisma.webhookEvent.update({
+      where: {
+        provider_eventId: { provider: "shipping", eventId: parsed.data.eventId },
+      },
+      data: { status: "PROCESSED", processedAt: new Date() },
+    }),
+  ]);
 
   res.status(200).json({ ok: true, deduplicated: false, status: nextStatus });
 });

@@ -31,6 +31,9 @@
       "get": { "summary": "Search & paginate active products", "responses": { "200": { "description": "Product list" } } },
       "post": { "summary": "Create product (Seller)", "responses": { "201": { "description": "Created" } } }
     },
+    "/api/v1/products/recommendations": {
+      "get": { "summary": "DB-backed product recommendations via Python engine", "responses": { "200": { "description": "Recommendations" } } }
+    },
     "/api/v1/products/{productId}/skus": { "post": { "summary": "Add SKU to product", "responses": { "201": { "description": "SKU created" } } } },
     "/api/v1/inventory/adjust": { "post": { "summary": "Adjust warehouse inventory", "responses": { "200": { "description": "Adjusted" } } } },
     "/api/v1/cart": { "get": { "summary": "Get customer cart", "responses": { "200": { "description": "Cart" } } } },

@@ -1,10 +1,19 @@
 from pydantic import BaseModel, Field
 
 
+class CatalogCandidate(BaseModel):
+    sku_code: str
+    name: str
+    category: str
+    price: float
+    popularity: float = 0.85
+
+
 class RecommendationRequest(BaseModel):
     user_id: str | None = None
     viewed_categories: list[str] = Field(default_factory=list)
     purchased_skus: list[str] = Field(default_factory=list)
+    catalog: list[CatalogCandidate] | None = None
     limit: int = Field(default=4, ge=1, le=20)
 
 
@@ -61,8 +70,14 @@ def recommend_products(req: RecommendationRequest) -> RecommendationResponse:
     has_history = bool(viewed or purchased)
     strategy = "personalized" if has_history else "cold_start_popularity"
 
+    source_catalog = (
+        [c.model_dump() for c in req.catalog]
+        if req.catalog
+        else SYNTHETIC_CATALOG
+    )
+
     scored: list[RecommendedItem] = []
-    for item in SYNTHETIC_CATALOG:
+    for item in source_catalog:
         if item["sku_code"] in purchased:
             continue
         score = float(item["popularity"])
