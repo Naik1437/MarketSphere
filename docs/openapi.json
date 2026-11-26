@@ -9,6 +9,15 @@
     { "url": "http://localhost:4000", "description": "Core Express API" },
     { "url": "http://localhost:8000", "description": "Python FastAPI Engine" }
   ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
   "paths": {
     "/health": { "get": { "summary": "API Health & DB/Redis Readiness", "responses": { "200": { "description": "Healthy" } } } },
     "/api/v1/auth/login": { "post": { "summary": "Login with email and password", "responses": { "200": { "description": "JWT access & refresh tokens" } } } },

@@ -186,7 +186,7 @@ ordersRouter.post(
             orderId: order.id,
             quantity: item.quantity,
             expiresAt,
-            idempotencyKey: `reserve:${idempotencyKey}:${item.skuId}`,
+            idempotencyKey: `reserve:${req.user!.sub}:${idempotencyKey}:${item.skuId}`,
           });
           reservations.push(r);
         }
