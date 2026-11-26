@@ -146,4 +146,51 @@ describe("Audit Regression Tests (Concurrency & Scoped Idempotency)", () => {
     expect(s3Dup.status).toBe(200);
     expect(s3Dup.body.deduplicated).toBe(true);
   });
+
+  it("clears only purchased cart items after confirmed checkout and deduplicates repeat", async () => {
+    const otherSku = await prisma.sku.findUniqueOrThrow({
+      where: { skuCode: "MEERA-MUG-001" },
+    });
+
+    await request(app)
+      .post("/api/v1/cart/items")
+      .set("Authorization", `Bearer ${customer1Token}`)
+      .send({ skuId, quantity: 1 });
+    await request(app)
+      .post("/api/v1/cart/items")
+      .set("Authorization", `Bearer ${customer1Token}`)
+      .send({ skuId: otherSku.id, quantity: 1 });
+
+    const key = `cart-clear-${Date.now()}`;
+    const checkout = await request(app)
+      .post("/api/v1/orders/checkout")
+      .set("Authorization", `Bearer ${customer1Token}`)
+      .send({
+        warehouseId,
+        idempotencyKey: key,
+        items: [{ skuId, quantity: 1 }],
+      });
+    expect(checkout.status).toBe(201);
+
+    const cartRes = await request(app)
+      .get("/api/v1/cart")
+      .set("Authorization", `Bearer ${customer1Token}`);
+    expect(cartRes.status).toBe(200);
+    const remainingSkuIds = (cartRes.body.cart.items as Array<{ skuId: string }>).map(
+      (i) => i.skuId
+    );
+    expect(remainingSkuIds).not.toContain(skuId);
+    expect(remainingSkuIds).toContain(otherSku.id);
+
+    const repeat = await request(app)
+      .post("/api/v1/orders/checkout")
+      .set("Authorization", `Bearer ${customer1Token}`)
+      .send({
+        warehouseId,
+        idempotencyKey: key,
+        items: [{ skuId, quantity: 1 }],
+      });
+    expect(repeat.status).toBe(200);
+    expect(repeat.body.deduplicated).toBe(true);
+  });
 });

@@ -129,7 +129,7 @@ ordersRouter.post(
         }
 
         const pyUrl = process.env.PYTHON_ENGINE_URL || "http://python-engine:8000";
-        let pyPricing: {
+        type PyPricingResult = {
           subtotal: string;
           discount_amount: string;
           total_amount: string;
@@ -139,7 +139,8 @@ ordersRouter.post(
             commission_amount: string;
             net_seller_amount: string;
           }>;
-        } | null = null;
+        };
+        let pyPricing: PyPricingResult | null = null;
 
         try {
           const pyRes = await fetch(`${pyUrl}/api/v1/pricing/calculate`, {
@@ -160,7 +161,7 @@ ordersRouter.post(
             signal: AbortSignal.timeout(1500),
           });
           if (pyRes.ok) {
-            pyPricing = (await pyRes.json()) as typeof pyPricing;
+            pyPricing = (await pyRes.json()) as PyPricingResult;
           }
         } catch {
           // Fallback to deterministic local calculation if Python engine is unreachable
@@ -288,6 +289,20 @@ ordersRouter.post(
             status: payAuth.status,
           },
         });
+        if (payAuth.status === "CAPTURED") {
+          const cart = await tx.cart.findUnique({
+            where: { userId: req.user!.sub },
+            select: { id: true },
+          });
+          if (cart) {
+            await tx.cartItem.deleteMany({
+              where: {
+                cartId: cart.id,
+                skuId: { in: items.map((i) => i.skuId) },
+              },
+            });
+          }
+        }
         return tx.order.update({
           where: { id: result.order.id },
           data: {
