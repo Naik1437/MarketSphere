@@ -9,6 +9,19 @@ import {
 
 export const sellersRouter = Router();
 
+sellersRouter.get(
+  "/",
+  authenticate,
+  requireRole("ADMIN"),
+  async (_req: Request, res: Response) => {
+    const sellers = await prisma.seller.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { email: true, fullName: true } } },
+    });
+    res.status(200).json({ sellers });
+  }
+);
+
 const onboardSchema = z.object({
   businessName: z.string().min(2).max(120),
   slug: z

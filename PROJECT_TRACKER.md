@@ -16,7 +16,7 @@ Foundation initialized. This tracker records requirement and assessment progress
 
 ## Assessments (A01–A15)
 
-- **A01** Marketplace storefront and seller UI — Pending
+- **A01** Marketplace storefront and seller UI — Implemented (Next.js App Router, Tailwind, TanStack Query, all 5 role dashboards, Playwright E2E verified)
 - **A02** Commerce backend APIs — Implemented (sellers, catalog/SKUs, inventory, cart, checkout, orders, shipments, returns, refunds, reviews, disputes, settlements)
 - **A03** Commerce database model — Schema, migration, and idempotent seed complete
 - **A04** Marketplace security — Auth, RBAC, ownership isolation, rate limiting, and validation complete
@@ -27,7 +27,7 @@ Foundation initialized. This tracker records requirement and assessment progress
 - **A09** Docker marketplace environment — Foundation only
 - **A10** Git collaboration and reviews — Foundation only
 - **A11** Marketplace CI/CD — Foundation only
-- **A12** Commerce test suite — Core integration suite passing (11/11 tests); E2E/Playwright pending
+- **A12** Commerce test suite — API/DB integration suite (11/11) and Playwright E2E browser suite (6/6 flows) passing
 - **A13** Marketplace API documentation — Pending
 - **A14** Marketplace deployment — Pending
 - **A15** Marketplace incident simulation — Pending

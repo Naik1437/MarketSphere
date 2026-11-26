@@ -9,6 +9,18 @@ import {
 
 export const inventoryRouter = Router();
 
+inventoryRouter.get(
+  "/warehouses",
+  authenticate,
+  async (_req: Request, res: Response) => {
+    const warehouses = await prisma.warehouse.findMany({
+      where: { isActive: true },
+      orderBy: { code: "asc" },
+    });
+    res.status(200).json({ warehouses });
+  }
+);
+
 const adjustSchema = z.object({
   skuId: z.string().min(1),
   warehouseId: z.string().min(1),

@@ -75,6 +75,21 @@ catalogRouter.get("/", async (req: Request, res: Response) => {
   });
 });
 
+catalogRouter.get(
+  "/mine",
+  authenticate,
+  requireRole("SELLER", "ADMIN"),
+  async (req: Request, res: Response) => {
+    const where = req.user!.sellerId ? { sellerId: req.user!.sellerId } : {};
+    const items = await prisma.product.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: { skus: true },
+    });
+    res.status(200).json({ items });
+  }
+);
+
 catalogRouter.get("/:productId", async (req: Request, res: Response) => {
   const product = await prisma.product.findUnique({
     where: { id: String(req.params.productId) },
