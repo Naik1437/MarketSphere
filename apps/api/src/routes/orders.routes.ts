@@ -1,0 +1,423 @@
+import { OrderStatus } from "@prisma/client";
+import { Router, type Request, type Response } from "express";
+import { z } from "zod";
+import { paymentProvider } from "../integrations/payment.interface";
+import { shippingProvider } from "../integrations/shipping.interface";
+import { prisma } from "../lib/prisma";
+import { authenticate, requireRole } from "../middleware/auth";
+import { scheduleReservationExpiry } from "../queues/reservation.queue";
+import {
+  InsufficientStockError,
+  reserveStockInTx,
+} from "../services/inventory.service";
+
+export const ordersRouter = Router();
+
+const checkoutSchema = z.object({
+  warehouseId: z.string().min(1),
+  promotionCode: z.string().trim().min(2).max(40).optional(),
+  idempotencyKey: z.string().min(8).max(128),
+  items: z
+    .array(
+      z.object({
+        skuId: z.string().min(1),
+        quantity: z.number().int().positive().max(100),
+      })
+    )
+    .min(1)
+    .max(50),
+});
+
+const ALLOWED_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  PENDING: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["PROCESSING", "CANCELLED"],
+  PROCESSING: ["SHIPPED", "CANCELLED"],
+  SHIPPED: ["DELIVERED"],
+  DELIVERED: ["REFUNDED"],
+  CANCELLED: [],
+  REFUNDED: [],
+};
+
+ordersRouter.post(
+  "/checkout",
+  authenticate,
+  requireRole("CUSTOMER"),
+  async (req: Request, res: Response) => {
+    const parsed = checkoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid checkout payload" });
+      return;
+    }
+
+    const { warehouseId, promotionCode, idempotencyKey, items } = parsed.data;
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { idempotencyKey },
+      include: { items: true, payments: true, reservations: true },
+    });
+    if (existingOrder) {
+      res.status(200).json({ order: existingOrder, deduplicated: true });
+      return;
+    }
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const skuIds = items.map((i) => i.skuId);
+        const skus = await tx.sku.findMany({
+          where: { id: { in: skuIds }, isActive: true },
+          include: {
+            product: {
+              select: {
+                sellerId: true,
+                seller: { select: { commissionRate: true } },
+              },
+            },
+          },
+        });
+
+        if (skus.length !== skuIds.length) {
+          throw new Error("INVALID_SKU");
+        }
+
+        const skuMap = new Map(skus.map((s) => [s.id, s]));
+        let subtotal = 0;
+
+        const orderItemsData = items.map((item) => {
+          const sku = skuMap.get(item.skuId)!;
+          const unitPrice = Number(sku.price);
+          const totalPrice = unitPrice * item.quantity;
+          subtotal += totalPrice;
+          return {
+            skuId: sku.id,
+            sellerId: sku.product.sellerId,
+            quantity: item.quantity,
+            unitPrice: unitPrice.toFixed(2),
+            totalPrice: totalPrice.toFixed(2),
+            commissionRate: Number(sku.product.seller.commissionRate),
+          };
+        });
+
+        let discountAmount = 0;
+        let promotionId: string | null = null;
+
+        if (promotionCode) {
+          const promo = await tx.promotion.findUnique({
+            where: { code: promotionCode },
+          });
+          const now = new Date();
+          if (
+            !promo ||
+            !promo.isActive ||
+            promo.startsAt > now ||
+            promo.endsAt < now ||
+            (promo.maxUses !== null && promo.usedCount >= promo.maxUses) ||
+            subtotal < Number(promo.minOrderTotal)
+          ) {
+            throw new Error("INVALID_PROMOTION");
+          }
+          promotionId = promo.id;
+          if (promo.discountType === "PERCENTAGE") {
+            discountAmount = (subtotal * Number(promo.discountValue)) / 100;
+          } else {
+            discountAmount = Number(promo.discountValue);
+          }
+          discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
+
+          await tx.promotion.update({
+            where: { id: promo.id },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
+        const totalAmount = Math.max(0, subtotal - discountAmount);
+        const orderNumber = `MS-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+        const order = await tx.order.create({
+          data: {
+            orderNumber,
+            customerId: req.user!.sub,
+            promotionId,
+            status: "PENDING",
+            subtotalAmount: subtotal.toFixed(2),
+            discountAmount: discountAmount.toFixed(2),
+            totalAmount: totalAmount.toFixed(2),
+            currency: "INR",
+            idempotencyKey,
+          },
+        });
+
+        for (const oi of orderItemsData) {
+          const createdItem = await tx.orderItem.create({
+            data: {
+              orderId: order.id,
+              skuId: oi.skuId,
+              sellerId: oi.sellerId,
+              quantity: oi.quantity,
+              unitPrice: oi.unitPrice,
+              totalPrice: oi.totalPrice,
+            },
+          });
+
+          const itemTotal = Number(oi.totalPrice);
+          const commissionAmt = (itemTotal * oi.commissionRate) / 100;
+          const netSellerAmt = itemTotal - commissionAmt;
+
+          await tx.commission.create({
+            data: {
+              sellerId: oi.sellerId,
+              orderItemId: createdItem.id,
+              commissionAmount: commissionAmt.toFixed(2),
+              netSellerAmount: netSellerAmt.toFixed(2),
+            },
+          });
+        }
+
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        const reservations = [];
+        for (const item of items) {
+          const r = await reserveStockInTx(tx, {
+            skuId: item.skuId,
+            warehouseId,
+            orderId: order.id,
+            quantity: item.quantity,
+            expiresAt,
+            idempotencyKey: `reserve:${idempotencyKey}:${item.skuId}`,
+          });
+          reservations.push(r);
+        }
+
+        const payAuth = await paymentProvider.authorize({
+          orderId: order.id,
+          amount: totalAmount,
+          currency: "INR",
+          idempotencyKey,
+        });
+
+        const payment = await tx.payment.create({
+          data: {
+            orderId: order.id,
+            provider: payAuth.provider,
+            providerPaymentId: payAuth.providerPaymentId,
+            amount: totalAmount.toFixed(2),
+            currency: "INR",
+            status: payAuth.status,
+            idempotencyKey: `pay:${idempotencyKey}`,
+          },
+        });
+
+        const confirmedOrder = await tx.order.update({
+          where: { id: order.id },
+          data: { status: payAuth.status === "CAPTURED" ? "CONFIRMED" : "PENDING" },
+          include: { items: true, payments: true, reservations: true },
+        });
+
+        return { order: confirmedOrder, payment, reservations };
+      });
+
+      for (const r of result.reservations) {
+        await scheduleReservationExpiry(r.id, 15 * 60 * 1000).catch(() => {});
+      }
+
+      res.status(201).json({ order: result.order });
+    } catch (err) {
+      if (err instanceof InsufficientStockError) {
+        res.status(409).json({ error: err.message });
+        return;
+      }
+      if (err instanceof Error && err.message === "INVALID_SKU") {
+        res.status(404).json({ error: "One or more active SKUs not found" });
+        return;
+      }
+      if (err instanceof Error && err.message === "INVALID_PROMOTION") {
+        res.status(400).json({ error: "Promotion code is invalid or ineligible" });
+        return;
+      }
+      throw err;
+    }
+  }
+);
+
+ordersRouter.get(
+  "/",
+  authenticate,
+  async (req: Request, res: Response) => {
+    const where =
+      req.user!.role === "CUSTOMER"
+        ? { customerId: req.user!.sub }
+        : req.user!.role === "SELLER"
+          ? { items: { some: { sellerId: req.user!.sellerId ?? "" } } }
+          : {};
+
+    const orders = await prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { items: true, shipments: true },
+    });
+    res.status(200).json({ orders });
+  }
+);
+
+ordersRouter.get(
+  "/:orderId",
+  authenticate,
+  async (req: Request, res: Response) => {
+    const order = await prisma.order.findUnique({
+      where: { id: String(req.params.orderId) },
+      include: {
+        items: true,
+        payments: true,
+        shipments: true,
+        reservations: true,
+      },
+    });
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    if (
+      req.user!.role === "CUSTOMER" &&
+      order.customerId !== req.user!.sub
+    ) {
+      res.status(403).json({ error: "Forbidden: order ownership required" });
+      return;
+    }
+
+    res.status(200).json({ order });
+  }
+);
+
+ordersRouter.patch(
+  "/:orderId/status",
+  authenticate,
+  requireRole("WAREHOUSE_OPERATOR", "ADMIN"),
+  async (req: Request, res: Response) => {
+    const parsed = z
+      .object({
+        status: z.enum([
+          "PENDING",
+          "CONFIRMED",
+          "PROCESSING",
+          "SHIPPED",
+          "DELIVERED",
+          "CANCELLED",
+          "REFUNDED",
+        ]),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid status payload" });
+      return;
+    }
+
+    const orderId = String(req.params.orderId);
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    const allowed = ALLOWED_ORDER_TRANSITIONS[order.status];
+    if (!allowed.includes(parsed.data.status)) {
+      res.status(409).json({
+        error: `Invalid order transition from ${order.status} to ${parsed.data.status}`,
+      });
+      return;
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: { status: parsed.data.status },
+    });
+    res.status(200).json({ order: updated });
+  }
+);
+
+ordersRouter.post(
+  "/:orderId/shipments",
+  authenticate,
+  requireRole("WAREHOUSE_OPERATOR", "ADMIN"),
+  async (req: Request, res: Response) => {
+    const parsed = z
+      .object({
+        warehouseId: z.string().min(1),
+        carrier: z.string().min(2).max(60),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid shipment payload" });
+      return;
+    }
+
+    const orderId = String(req.params.orderId);
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order || !["CONFIRMED", "PROCESSING", "SHIPPED"].includes(order.status)) {
+      res.status(409).json({ error: "Order is not ready for shipment" });
+      return;
+    }
+
+    const warehouse = await prisma.warehouse.findUnique({
+      where: { id: parsed.data.warehouseId },
+    });
+    if (!warehouse) {
+      res.status(404).json({ error: "Warehouse not found" });
+      return;
+    }
+
+    const label = await shippingProvider.createLabel({
+      orderId,
+      warehouseCode: warehouse.code,
+      carrier: parsed.data.carrier,
+    });
+
+    const shipment = await prisma.$transaction(async (tx) => {
+      const created = await tx.shipment.create({
+        data: {
+          orderId,
+          warehouseId: warehouse.id,
+          carrier: parsed.data.carrier,
+          trackingNumber: label.trackingNumber,
+          status: label.status,
+        },
+      });
+      if (order.status === "CONFIRMED") {
+        await tx.order.update({
+          where: { id: orderId },
+          data: { status: "PROCESSING" },
+        });
+      }
+      return created;
+    });
+
+    res.status(201).json({ shipment });
+  }
+);
+
+ordersRouter.patch(
+  "/shipments/:shipmentId/status",
+  authenticate,
+  requireRole("WAREHOUSE_OPERATOR", "ADMIN"),
+  async (req: Request, res: Response) => {
+    const parsed = z
+      .object({
+        status: z.enum(["IN_TRANSIT", "DELIVERED", "FAILED"]),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid shipment status" });
+      return;
+    }
+
+    const shipmentId = String(req.params.shipmentId);
+    const updated = await prisma.shipment.update({
+      where: { id: shipmentId },
+      data: {
+        status: parsed.data.status,
+        ...(parsed.data.status === "IN_TRANSIT" ? { shippedAt: new Date() } : {}),
+        ...(parsed.data.status === "DELIVERED" ? { deliveredAt: new Date() } : {}),
+      },
+    });
+    res.status(200).json({ shipment: updated });
+  }
+);

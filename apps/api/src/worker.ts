@@ -1,30 +1,38 @@
 import { Worker } from "bullmq";
+import { prisma } from "./lib/prisma";
 import { redis } from "./lib/redis";
 import { FOUNDATION_QUEUE_NAME } from "./queues/foundation.queue";
+import { RESERVATION_EXPIRY_QUEUE } from "./queues/reservation.queue";
+import { expireReservationById } from "./services/inventory.service";
 
-const worker = new Worker(
+const foundationWorker = new Worker(
   FOUNDATION_QUEUE_NAME,
   async (job) => {
     console.log(`[worker] processed job ${job.id} (${job.name})`);
     return { ok: true };
   },
-  {
-    connection: redis,
-    concurrency: 2,
-  }
+  { connection: redis, concurrency: 2 }
 );
 
-worker.on("ready", () => {
-  console.log(`[worker] listening on queue "${FOUNDATION_QUEUE_NAME}"`);
-});
+const reservationWorker = new Worker(
+  RESERVATION_EXPIRY_QUEUE,
+  async (job) => {
+    const { reservationId } = job.data as { reservationId: string };
+    const result = await expireReservationById(reservationId);
+    console.log(`[worker] reservation-expiry ${reservationId}:`, result);
+    return result;
+  },
+  { connection: redis, concurrency: 4 }
+);
 
-worker.on("failed", (job, err) => {
-  console.error(`[worker] job ${job?.id} failed:`, err.message);
+reservationWorker.on("failed", (job, err) => {
+  console.error(`[worker] reservation job ${job?.id} failed:`, err.message);
 });
 
 async function shutdown(signal: string) {
   console.log(`[worker] received ${signal}, shutting down...`);
-  await worker.close();
+  await Promise.all([foundationWorker.close(), reservationWorker.close()]);
+  await prisma.$disconnect();
   await redis.quit();
   process.exit(0);
 }

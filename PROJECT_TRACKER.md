@@ -17,17 +17,17 @@ Foundation initialized. This tracker records requirement and assessment progress
 ## Assessments (A01–A15)
 
 - **A01** Marketplace storefront and seller UI — Pending
-- **A02** Commerce backend APIs — Pending
+- **A02** Commerce backend APIs — Implemented (sellers, catalog/SKUs, inventory, cart, checkout, orders, shipments, returns, refunds, reviews, disputes, settlements)
 - **A03** Commerce database model — Schema, migration, and idempotent seed complete
-- **A04** Marketplace security — Auth, RBAC, and ownership foundation complete; module-level security pending
+- **A04** Marketplace security — Auth, RBAC, ownership isolation, rate limiting, and validation complete
 - **A05** Python pricing and feed engine — Pending
 - **A06** FastAPI recommendation service — Pending
-- **A07** Inventory reservation engine — Pending
-- **A08** Commerce third-party integrations — Pending
+- **A07** Inventory reservation engine — Implemented (`FOR UPDATE` concurrency, stock ledger, BullMQ expiry worker)
+- **A08** Commerce third-party integrations — Pending (local stub interfaces only)
 - **A09** Docker marketplace environment — Foundation only
 - **A10** Git collaboration and reviews — Foundation only
 - **A11** Marketplace CI/CD — Foundation only
-- **A12** Commerce test suite — Pending
+- **A12** Commerce test suite — Core integration suite passing (11/11 tests); E2E/Playwright pending
 - **A13** Marketplace API documentation — Pending
 - **A14** Marketplace deployment — Pending
 - **A15** Marketplace incident simulation — Pending

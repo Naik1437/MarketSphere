@@ -4,6 +4,12 @@ import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { redis } from "./lib/redis";
 import { authRouter } from "./routes/auth.routes";
+import { cartRouter } from "./routes/cart.routes";
+import { catalogRouter } from "./routes/catalog.routes";
+import { inventoryRouter } from "./routes/inventory.routes";
+import { ordersRouter } from "./routes/orders.routes";
+import { postOrderRouter } from "./routes/post-order.routes";
+import { sellersRouter } from "./routes/sellers.routes";
 
 export const app = express();
 
@@ -40,6 +46,12 @@ app.get("/health", async (_req: Request, res: Response) => {
 });
 
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/sellers", sellersRouter);
+app.use("/api/v1/products", catalogRouter);
+app.use("/api/v1/inventory", inventoryRouter);
+app.use("/api/v1/cart", cartRouter);
+app.use("/api/v1/orders", ordersRouter);
+app.use("/api/v1", postOrderRouter);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: "Not found" });
