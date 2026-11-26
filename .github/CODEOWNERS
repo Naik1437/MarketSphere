@@ -1,0 +1,7 @@
+# Default code owners for MarketSphere
+* @marketsphere-maintainers
+/apps/web/ @marketsphere-frontend
+/apps/api/ @marketsphere-backend
+/services/python-engine/ @marketsphere-python
+/.github/ @marketsphere-devops
+/docker-compose.yml @marketsphere-devops

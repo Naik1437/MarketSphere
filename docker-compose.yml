@@ -1,0 +1,123 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marketsphere}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_local_only}
+      POSTGRES_DB: ${POSTGRES_DB:-marketsphere}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marketsphere} -d ${POSTGRES_DB:-marketsphere}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - data_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      API_PORT: ${API_PORT:-4000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://marketsphere:changeme_local_only@postgres:5432/marketsphere?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend_net
+      - data_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://marketsphere:changeme_local_only@postgres:5432/marketsphere?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - data_net
+
+  python-engine:
+    build:
+      context: ./services/python-engine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ./apps/web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NEXT_PUBLIC_PYTHON_ENGINE_URL: ${NEXT_PUBLIC_PYTHON_ENGINE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - frontend_net
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+networks:
+  frontend_net:
+    driver: bridge
+  backend_net:
+    driver: bridge
+  data_net:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres_data:
+  redis_data:
