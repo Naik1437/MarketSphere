@@ -86,11 +86,98 @@ ordersRouter.post(
 
         const skuMap = new Map(skus.map((s) => [s.id, s]));
         let subtotal = 0;
+        let discountAmount = 0;
+        let totalAmount = 0;
+        let promotionId: string | null = null;
+        let promoRule: {
+          code: string;
+          discount_type: "PERCENTAGE" | "FIXED_AMOUNT";
+          discount_value: string;
+          min_order_total: string;
+        } | null = null;
 
-        const orderItemsData = items.map((item) => {
+        if (promotionCode) {
+          const promo = await tx.promotion.findUnique({
+            where: { code: promotionCode },
+          });
+          const now = new Date();
+          const rawSub = items.reduce(
+            (s, i) => s + Number(skuMap.get(i.skuId)!.price) * i.quantity,
+            0
+          );
+          if (
+            !promo ||
+            !promo.isActive ||
+            promo.startsAt > now ||
+            promo.endsAt < now ||
+            (promo.maxUses !== null && promo.usedCount >= promo.maxUses) ||
+            rawSub < Number(promo.minOrderTotal)
+          ) {
+            throw new Error("INVALID_PROMOTION");
+          }
+          promotionId = promo.id;
+          promoRule = {
+            code: promo.code,
+            discount_type: promo.discountType,
+            discount_value: promo.discountValue.toString(),
+            min_order_total: promo.minOrderTotal.toString(),
+          };
+          await tx.promotion.update({
+            where: { id: promo.id },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
+        const pyUrl = process.env.PYTHON_ENGINE_URL || "http://python-engine:8000";
+        let pyPricing: {
+          subtotal: string;
+          discount_amount: string;
+          total_amount: string;
+          lines: Array<{
+            sku_code: string;
+            line_total: string;
+            commission_amount: string;
+            net_seller_amount: string;
+          }>;
+        } | null = null;
+
+        try {
+          const pyRes = await fetch(`${pyUrl}/api/v1/pricing/calculate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              items: items.map((item) => {
+                const sku = skuMap.get(item.skuId)!;
+                return {
+                  sku_code: sku.skuCode,
+                  unit_price: sku.price.toString(),
+                  quantity: item.quantity,
+                  commission_rate: sku.product.seller.commissionRate.toString(),
+                };
+              }),
+              ...(promoRule ? { promotion: promoRule } : {}),
+            }),
+            signal: AbortSignal.timeout(1500),
+          });
+          if (pyRes.ok) {
+            pyPricing = (await pyRes.json()) as typeof pyPricing;
+          }
+        } catch {
+          // Fallback to deterministic local calculation if Python engine is unreachable
+        }
+
+        const orderItemsData = items.map((item, idx) => {
           const sku = skuMap.get(item.skuId)!;
           const unitPrice = Number(sku.price);
-          const totalPrice = unitPrice * item.quantity;
+          const pyLine = pyPricing?.lines[idx];
+          const totalPrice = pyLine ? Number(pyLine.line_total) : unitPrice * item.quantity;
+          const commissionRate = Number(sku.product.seller.commissionRate);
+          const commissionAmt = pyLine
+            ? Number(pyLine.commission_amount)
+            : (totalPrice * commissionRate) / 100;
+          const netSellerAmt = pyLine
+            ? Number(pyLine.net_seller_amount)
+            : totalPrice - commissionAmt;
           subtotal += totalPrice;
           return {
             skuId: sku.id,
@@ -98,43 +185,26 @@ ordersRouter.post(
             quantity: item.quantity,
             unitPrice: unitPrice.toFixed(2),
             totalPrice: totalPrice.toFixed(2),
-            commissionRate: Number(sku.product.seller.commissionRate),
+            commissionAmt: commissionAmt.toFixed(2),
+            netSellerAmt: netSellerAmt.toFixed(2),
           };
         });
 
-        let discountAmount = 0;
-        let promotionId: string | null = null;
-
-        if (promotionCode) {
-          const promo = await tx.promotion.findUnique({
-            where: { code: promotionCode },
-          });
-          const now = new Date();
-          if (
-            !promo ||
-            !promo.isActive ||
-            promo.startsAt > now ||
-            promo.endsAt < now ||
-            (promo.maxUses !== null && promo.usedCount >= promo.maxUses) ||
-            subtotal < Number(promo.minOrderTotal)
-          ) {
-            throw new Error("INVALID_PROMOTION");
+        if (pyPricing) {
+          subtotal = Number(pyPricing.subtotal);
+          discountAmount = Number(pyPricing.discount_amount);
+          totalAmount = Number(pyPricing.total_amount);
+        } else {
+          if (promoRule) {
+            discountAmount =
+              promoRule.discount_type === "PERCENTAGE"
+                ? (subtotal * Number(promoRule.discount_value)) / 100
+                : Number(promoRule.discount_value);
+            discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
           }
-          promotionId = promo.id;
-          if (promo.discountType === "PERCENTAGE") {
-            discountAmount = (subtotal * Number(promo.discountValue)) / 100;
-          } else {
-            discountAmount = Number(promo.discountValue);
-          }
-          discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
-
-          await tx.promotion.update({
-            where: { id: promo.id },
-            data: { usedCount: { increment: 1 } },
-          });
+          totalAmount = Math.max(0, subtotal - discountAmount);
         }
 
-        const totalAmount = Math.max(0, subtotal - discountAmount);
         const orderNumber = `MS-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
         const order = await tx.order.create({
@@ -163,16 +233,12 @@ ordersRouter.post(
             },
           });
 
-          const itemTotal = Number(oi.totalPrice);
-          const commissionAmt = (itemTotal * oi.commissionRate) / 100;
-          const netSellerAmt = itemTotal - commissionAmt;
-
           await tx.commission.create({
             data: {
               sellerId: oi.sellerId,
               orderItemId: createdItem.id,
-              commissionAmount: commissionAmt.toFixed(2),
-              netSellerAmount: netSellerAmt.toFixed(2),
+              commissionAmount: oi.commissionAmt,
+              netSellerAmount: oi.netSellerAmt,
             },
           });
         }
@@ -372,6 +438,15 @@ ordersRouter.post(
       .object({
         warehouseId: z.string().min(1),
         carrier: z.string().min(2).max(60),
+        idempotencyKey: z.string().min(4).max(128).optional(),
+        items: z
+          .array(
+            z.object({
+              skuId: z.string().min(1),
+              quantity: z.number().int().positive(),
+            })
+          )
+          .optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -394,17 +469,30 @@ ordersRouter.post(
       return;
     }
 
-    const existingShipment = await prisma.shipment.findFirst({
-      where: {
-        orderId,
-        warehouseId: warehouse.id,
-        carrier: parsed.data.carrier,
-        status: "LABEL_CREATED",
-      },
-    });
-    if (existingShipment) {
-      res.status(409).json({ error: "Duplicate active shipment for order/warehouse/carrier" });
-      return;
+    if (parsed.data.idempotencyKey) {
+      const existingByKey = await prisma.shipment.findFirst({
+        where: {
+          orderId,
+          trackingNumber: { contains: parsed.data.idempotencyKey.slice(-6).toUpperCase() },
+        },
+      });
+      if (existingByKey) {
+        res.status(200).json({ shipment: existingByKey, deduplicated: true });
+        return;
+      }
+    } else {
+      const existingShipment = await prisma.shipment.findFirst({
+        where: {
+          orderId,
+          warehouseId: warehouse.id,
+          carrier: parsed.data.carrier,
+          status: "LABEL_CREATED",
+        },
+      });
+      if (existingShipment) {
+        res.status(409).json({ error: "Duplicate active shipment for order/warehouse/carrier" });
+        return;
+      }
     }
 
     const label = await shippingProvider.createLabel({
@@ -413,13 +501,17 @@ ordersRouter.post(
       carrier: parsed.data.carrier,
     });
 
+    const trackingNumber = parsed.data.idempotencyKey
+      ? `${label.trackingNumber}-${parsed.data.idempotencyKey.slice(-6).toUpperCase()}`
+      : label.trackingNumber;
+
     const shipment = await prisma.$transaction(async (tx) => {
       const created = await tx.shipment.create({
         data: {
           orderId,
           warehouseId: warehouse.id,
           carrier: parsed.data.carrier,
-          trackingNumber: label.trackingNumber,
+          trackingNumber,
           status: label.status,
         },
       });

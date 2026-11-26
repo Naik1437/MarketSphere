@@ -96,4 +96,54 @@ describe("Audit Regression Tests (Concurrency & Scoped Idempotency)", () => {
     const statuses = [ref1.status, ref2.status].sort();
     expect(statuses).toEqual([201, 409]);
   });
+
+  it("supports multiple partial shipments with distinct idempotencyKeys and deduplicates repeats", async () => {
+    const whToken = await login("warehouse@marketsphere.local");
+    const checkout = await request(app)
+      .post("/api/v1/orders/checkout")
+      .set("Authorization", `Bearer ${customer1Token}`)
+      .send({
+        warehouseId,
+        idempotencyKey: `partial-${Date.now()}`,
+        items: [{ skuId, quantity: 2 }],
+      });
+    expect(checkout.status).toBe(201);
+    const orderId = checkout.body.order.id as string;
+
+    const s1 = await request(app)
+      .post(`/api/v1/orders/${orderId}/shipments`)
+      .set("Authorization", `Bearer ${whToken}`)
+      .send({
+        warehouseId,
+        carrier: "Delhivery",
+        idempotencyKey: `part-a-${Date.now()}`,
+        items: [{ skuId, quantity: 1 }],
+      });
+    expect(s1.status).toBe(201);
+
+    const s2 = await request(app)
+      .post(`/api/v1/orders/${orderId}/shipments`)
+      .set("Authorization", `Bearer ${whToken}`)
+      .send({
+        warehouseId,
+        carrier: "Delhivery",
+        idempotencyKey: `part-b-${Date.now()}`,
+        items: [{ skuId, quantity: 1 }],
+      });
+    expect(s2.status).toBe(201);
+
+    const dupKey = `dup-ship-${Date.now()}`;
+    const s3 = await request(app)
+      .post(`/api/v1/orders/${orderId}/shipments`)
+      .set("Authorization", `Bearer ${whToken}`)
+      .send({ warehouseId, carrier: "Delhivery", idempotencyKey: dupKey });
+    expect(s3.status).toBe(201);
+
+    const s3Dup = await request(app)
+      .post(`/api/v1/orders/${orderId}/shipments`)
+      .set("Authorization", `Bearer ${whToken}`)
+      .send({ warehouseId, carrier: "Delhivery", idempotencyKey: dupKey });
+    expect(s3Dup.status).toBe(200);
+    expect(s3Dup.body.deduplicated).toBe(true);
+  });
 });
