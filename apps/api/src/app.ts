@@ -10,6 +10,7 @@ import { inventoryRouter } from "./routes/inventory.routes";
 import { ordersRouter } from "./routes/orders.routes";
 import { postOrderRouter } from "./routes/post-order.routes";
 import { sellersRouter } from "./routes/sellers.routes";
+import { webhooksRouter } from "./routes/webhooks.routes";
 
 export const app = express();
 
@@ -51,6 +52,7 @@ app.use("/api/v1/products", catalogRouter);
 app.use("/api/v1/inventory", inventoryRouter);
 app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/orders", ordersRouter);
+app.use("/api/v1/webhooks", webhooksRouter);
 app.use("/api/v1", postOrderRouter);
 
 app.use((_req: Request, res: Response) => {

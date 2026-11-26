@@ -20,10 +20,10 @@ Foundation initialized. This tracker records requirement and assessment progress
 - **A02** Commerce backend APIs — Implemented (sellers, catalog/SKUs, inventory, cart, checkout, orders, shipments, returns, refunds, reviews, disputes, settlements)
 - **A03** Commerce database model — Schema, migration, and idempotent seed complete
 - **A04** Marketplace security — Auth, RBAC, ownership isolation, rate limiting, and validation complete
-- **A05** Python pricing and feed engine — Pending
-- **A06** FastAPI recommendation service — Pending
+- **A05** Python pricing and feed engine — Implemented (deterministic pricing/commissions, bulk catalog normalization, 1000-row benchmark 35.12ms)
+- **A06** FastAPI recommendation service — Implemented (personalized + cold-start fallback, connected to storefront)
 - **A07** Inventory reservation engine — Implemented (`FOR UPDATE` concurrency, stock ledger, BullMQ expiry worker)
-- **A08** Commerce third-party integrations — Pending (local stub interfaces only)
+- **A08** Commerce third-party integrations — Webhook HMAC verification & Redis deduplication implemented; payment/shipping/email/storage in Local Simulation mode (₹0 strict)
 - **A09** Docker marketplace environment — Foundation only
 - **A10** Git collaboration and reviews — Foundation only
 - **A11** Marketplace CI/CD — Foundation only

@@ -27,10 +27,38 @@ interface CatalogResponse {
   pagination: { page: number; limit: number; total: number; totalPages: number };
 }
 
+const PYTHON_ENGINE_URL =
+  process.env.NEXT_PUBLIC_PYTHON_ENGINE_URL || "http://localhost:8000";
+
+interface RecommendedItem {
+  sku_code: string;
+  name: string;
+  category: string;
+  price: number;
+  score: number;
+  reason: string;
+}
+
 export default function StorefrontPage() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [page, setPage] = useState(1);
+
+  const { data: recsData } = useQuery({
+    queryKey: ["recommendations", category],
+    queryFn: async () => {
+      const res = await fetch(`${PYTHON_ENGINE_URL}/api/v1/recommendations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          viewed_categories: category ? [category] : [],
+          limit: 4,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to load recommendations");
+      return res.json() as Promise<{ strategy: string; items: RecommendedItem[] }>;
+    },
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["products", q, category, page],
@@ -127,6 +155,36 @@ export default function StorefrontPage() {
           );
         })}
       </div>
+
+      {recsData && recsData.items.length > 0 && (
+        <section
+          aria-label="Recommended Products"
+          className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-5"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-slate-900">
+              Recommended for You
+            </h2>
+            <span className="text-xs text-slate-500">
+              Strategy: {recsData.strategy}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {recsData.items.map((item) => (
+              <div
+                key={item.sku_code}
+                className="rounded-lg border border-slate-200 bg-white p-3 text-sm"
+              >
+                <div className="font-medium text-slate-900">{item.name}</div>
+                <div className="text-xs text-slate-500">{item.reason}</div>
+                <div className="mt-2 font-semibold text-indigo-600">
+                  ₹{item.price} (score {item.score})
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {data && data.pagination.totalPages > 1 && (
         <div className="flex items-center justify-center gap-3">
