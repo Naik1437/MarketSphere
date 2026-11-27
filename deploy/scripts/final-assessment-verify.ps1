@@ -77,9 +77,20 @@ try {
   Invoke-Compose @("exec", "-T", "postgres", "createdb", "-U", "marketsphere", $restoreDb) | Out-Null
   Invoke-Compose @("exec", "-T", "postgres", "sh", "-lc", "psql -v ON_ERROR_STOP=1 -U marketsphere -d $restoreDb -f /tmp/marketsphere-backup.sql") | Set-Content (Join-Path $evidence "restore-output.txt")
   $sql = "SELECT 'Order' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"Order`" t UNION ALL SELECT 'Payment' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"Payment`" t UNION ALL SELECT 'Refund' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"Refund`" t UNION ALL SELECT 'WebhookEvent' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"WebhookEvent`" t ORDER BY 1;"
-  $source = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", "marketsphere", "-tAc", $sql) -join "").Trim()
-  $restored = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", $restoreDb, "-tAc", $sql) -join "").Trim()
-  if ($source -ne $restored) { throw "Backup restore row-content comparison failed`nSOURCE:`n$source`nRESTORED:`n$restored" }
+  $sourceRaw = Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", "marketsphere", "-tAc", $sql)
+  $restoredRaw = Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", $restoreDb, "-tAc", $sql)
+  function Normalize-Fingerprints([object[]]$Raw, [string]$Label) {
+    $records = @($Raw | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -ne "" })
+    $expected = @("Order", "Payment", "Refund", "WebhookEvent")
+    if ($records.Count -ne $expected.Count) { throw "$Label fingerprint record count was $($records.Count), expected $($expected.Count)" }
+    foreach ($name in $expected) {
+      if (@($records | Where-Object { $_ -match "^${name}:\d+:[0-9a-f]{32}$" }).Count -ne 1) { throw "$Label fingerprint record missing or invalid: $name" }
+    }
+    return (($records | Sort-Object) -join "`n")
+  }
+  $source = Normalize-Fingerprints $sourceRaw "Source"
+  $restored = Normalize-Fingerprints $restoredRaw "Restored"
+  if (-not [string]::Equals($source, $restored, [StringComparison]::Ordinal)) { throw "Backup restore row-content comparison failed`nSOURCE:`n$source`nRESTORED:`n$restored" }
   "Backup=$backup`nRestoreDatabase=$restoreDb`nSourceFingerprints=$source`nRestoredFingerprints=$restored" | Set-Content (Join-Path $evidence "backup-restore.txt")
   Invoke-Compose @("logs", "--no-color", "api", "worker") | Set-Content (Join-Path $evidence "service-logs.txt")
 }
