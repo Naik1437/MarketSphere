@@ -21,6 +21,38 @@ inventoryRouter.get(
   }
 );
 
+inventoryRouter.get(
+  "/skus",
+  authenticate,
+  requireRole("WAREHOUSE_OPERATOR", "SELLER", "ADMIN"),
+  async (req: Request, res: Response) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const skus = await prisma.sku.findMany({
+      where: {
+        isActive: true,
+        ...(q
+          ? {
+              OR: [
+                { skuCode: { contains: q, mode: "insensitive" } },
+                { title: { contains: q, mode: "insensitive" } },
+                { product: { name: { contains: q, mode: "insensitive" } } },
+              ],
+            }
+          : {}),
+      },
+      take: 50,
+      orderBy: { skuCode: "asc" },
+      select: {
+        id: true,
+        skuCode: true,
+        title: true,
+        product: { select: { name: true } },
+      },
+    });
+    res.status(200).json({ skus });
+  }
+);
+
 const adjustSchema = z.object({
   skuId: z.string().min(1),
   warehouseId: z.string().min(1),
@@ -37,6 +69,22 @@ inventoryRouter.post(
     const parsed = adjustSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid inventory adjustment payload" });
+      return;
+    }
+
+    const [sku, warehouse] = await Promise.all([
+      prisma.sku.findUnique({ where: { id: parsed.data.skuId }, select: { id: true } }),
+      prisma.warehouse.findUnique({
+        where: { id: parsed.data.warehouseId },
+        select: { id: true },
+      }),
+    ]);
+    if (!sku) {
+      res.status(404).json({ error: "SKU not found" });
+      return;
+    }
+    if (!warehouse) {
+      res.status(404).json({ error: "Warehouse not found" });
       return;
     }
 

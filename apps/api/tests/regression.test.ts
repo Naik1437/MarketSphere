@@ -193,4 +193,44 @@ describe("Audit Regression Tests (Concurrency & Scoped Idempotency)", () => {
     expect(repeat.status).toBe(200);
     expect(repeat.body.deduplicated).toBe(true);
   });
+
+  it("validates SKU existence on inventory adjust and increases stock by 10 with ledger entry", async () => {
+    const whToken = await login("warehouse@marketsphere.local");
+
+    const badRes = await request(app)
+      .post("/api/v1/inventory/adjust")
+      .set("Authorization", `Bearer ${whToken}`)
+      .send({
+        skuId: "KIRAN-CABLE-001",
+        warehouseId,
+        quantityDelta: 10,
+        movementType: "RESTOCK",
+        idempotencyKey: `bad-sku-${Date.now()}`,
+      });
+    expect(badRes.status).toBe(404);
+
+    const before = await prisma.inventory.findUniqueOrThrow({
+      where: { skuId_warehouseId: { skuId, warehouseId } },
+    });
+
+    const adjKey = `good-sku-${Date.now()}`;
+    const goodRes = await request(app)
+      .post("/api/v1/inventory/adjust")
+      .set("Authorization", `Bearer ${whToken}`)
+      .send({
+        skuId,
+        warehouseId,
+        quantityDelta: 10,
+        movementType: "RESTOCK",
+        idempotencyKey: adjKey,
+      });
+    expect(goodRes.status).toBe(200);
+    expect(goodRes.body.inventory.available).toBe(before.available + 10);
+
+    const ledger = await prisma.stockLedger.findUnique({
+      where: { idempotencyKey: adjKey },
+    });
+    expect(ledger).not.toBeNull();
+    expect(ledger!.quantityDelta).toBe(10);
+  });
 });

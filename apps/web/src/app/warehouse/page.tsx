@@ -10,6 +10,13 @@ interface Warehouse {
   name: string;
 }
 
+interface SkuOption {
+  id: string;
+  skuCode: string;
+  title: string;
+  product: { name: string };
+}
+
 interface Order {
   id: string;
   orderNumber: string;
@@ -26,6 +33,7 @@ interface Order {
 export default function WarehousePage() {
   const qc = useQueryClient();
   const [skuId, setSkuId] = useState("");
+  const [skuSearch, setSkuSearch] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [quantityDelta, setQuantityDelta] = useState(10);
   const [msg, setMsg] = useState<string | null>(null);
@@ -34,6 +42,14 @@ export default function WarehousePage() {
     queryKey: ["warehouses"],
     queryFn: () =>
       apiFetch<{ warehouses: Warehouse[] }>("/api/v1/inventory/warehouses"),
+  });
+
+  const { data: skusData } = useQuery({
+    queryKey: ["warehouse-skus", skuSearch],
+    queryFn: () =>
+      apiFetch<{ skus: SkuOption[] }>(
+        `/api/v1/inventory/skus?q=${encodeURIComponent(skuSearch)}`
+      ),
   });
 
   const { data: ordersData } = useQuery({
@@ -90,13 +106,15 @@ export default function WarehousePage() {
   });
 
   const warehouses = whData?.warehouses || [];
+  const skus = skusData?.skus || [];
   const effectiveWhId = warehouseId || warehouses[0]?.id || "";
+  const effectiveSkuId = skuId || skus[0]?.id || "";
 
   function handleAdjust(e: FormEvent) {
     e.preventDefault();
-    if (!effectiveWhId) return;
+    if (!effectiveWhId || !effectiveSkuId) return;
     adjust.mutate({
-      skuId,
+      skuId: effectiveSkuId,
       warehouseId: effectiveWhId,
       quantityDelta: Number(quantityDelta),
       movementType: "RESTOCK",
@@ -114,14 +132,26 @@ export default function WarehousePage() {
         className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
       >
         <h2 className="text-lg font-semibold">Restock / Adjust Inventory</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-4">
           <input
-            required
-            placeholder="SKU ID"
-            value={skuId}
-            onChange={(e) => setSkuId(e.target.value)}
+            type="search"
+            placeholder="Search SKU or product..."
+            value={skuSearch}
+            onChange={(e) => setSkuSearch(e.target.value)}
             className="rounded border border-slate-300 px-3 py-2 text-sm"
           />
+          <select
+            aria-label="Select SKU"
+            value={effectiveSkuId}
+            onChange={(e) => setSkuId(e.target.value)}
+            className="rounded border border-slate-300 px-3 py-2 text-sm"
+          >
+            {skus.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.product.name} — {s.skuCode} ({s.title})
+              </option>
+            ))}
+          </select>
           <select
             value={effectiveWhId}
             onChange={(e) => setWarehouseId(e.target.value)}
