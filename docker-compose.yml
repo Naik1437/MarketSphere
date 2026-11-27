@@ -33,7 +33,7 @@ services:
       retries: 5
 
   api:
-    image: ${IMAGE_OWNER:-naik1437}/marketsphere-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-naik1437}/marketsphere-api:${IMAGE_TAG:-latest}
     build:
       context: ./apps/api
     restart: unless-stopped
@@ -44,7 +44,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://marketsphere:changeme_local_only@postgres:5432/marketsphere?schema=public}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
-      - "4000:4000"
+      - "${API_HOST_PORT:-4000}:4000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,7 +60,7 @@ services:
       retries: 5
 
   worker:
-    image: ${IMAGE_OWNER:-naik1437}/marketsphere-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-naik1437}/marketsphere-api:${IMAGE_TAG:-latest}
     build:
       context: ./apps/api
     restart: unless-stopped
@@ -78,12 +78,12 @@ services:
       - data_net
 
   python-engine:
-    image: ${IMAGE_OWNER:-naik1437}/marketsphere-python-engine:${IMAGE_TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-naik1437}/marketsphere-python-engine:${IMAGE_TAG:-latest}
     build:
       context: ./services/python-engine
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${PYTHON_HOST_PORT:-8000}:8000"
     networks:
       - backend_net
     healthcheck:
@@ -93,7 +93,7 @@ services:
       retries: 5
 
   web:
-    image: ${IMAGE_OWNER:-naik1437}/marketsphere-web:${IMAGE_TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-naik1437}/marketsphere-web:${IMAGE_TAG:-latest}
     build:
       context: ./apps/web
     restart: unless-stopped
@@ -104,7 +104,7 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
       NEXT_PUBLIC_PYTHON_ENGINE_URL: ${NEXT_PUBLIC_PYTHON_ENGINE_URL:-http://localhost:8000}
     ports:
-      - "3000:3000"
+      - "${WEB_HOST_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
