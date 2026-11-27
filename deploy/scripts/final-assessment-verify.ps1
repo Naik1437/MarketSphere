@@ -46,6 +46,11 @@ try {
   Wait-Ready "http://localhost:$PythonPort/health"
   Invoke-Compose @("exec", "-T", "api", "npx", "prisma", "migrate", "deploy") | Set-Content (Join-Path $evidence "migrate.txt")
   Invoke-Compose @("exec", "-T", "api", "npx", "prisma", "db", "seed") | Set-Content (Join-Path $evidence "seed.txt")
+  # The production API image intentionally excludes test sources. Copy only verification inputs into this isolated container.
+  Invoke-Compose @("cp", "apps/api/tests", "api:/app/tests") | Out-Null
+  Invoke-Compose @("cp", "apps/api/src", "api:/app/src") | Out-Null
+  Invoke-Compose @("cp", "apps/api/tsconfig.json", "api:/app/tsconfig.json") | Out-Null
+  Invoke-Compose @("cp", "apps/api/vitest.config.ts", "api:/app/vitest.config.ts") | Out-Null
 
   $scenarios = @(
     @{ Name = "01-overselling"; Pattern = "prevents overselling on concurrent last-item checkout" },
