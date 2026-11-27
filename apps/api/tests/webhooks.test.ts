@@ -81,4 +81,52 @@ describe("A08 Webhook Signature & Deduplication", () => {
     expect(retryRes.status).toBe(200);
     expect(retryRes.body.retried).toBe(true);
   });
+
+  it("reconciles PENDING orders with CAPTURED payments", async () => {
+    const adminLogin = await request(app)
+      .post("/api/v1/auth/login")
+      .send({
+        email: "admin@marketsphere.local",
+        password: process.env.DEMO_SEED_PASSWORD || "DemoPass!2026",
+      });
+    expect(adminLogin.status).toBe(200);
+
+    const customer = await prisma.user.findUniqueOrThrow({
+      where: { email: "customer1@marketsphere.local" },
+    });
+
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `MS-REC-${Date.now()}`,
+        customerId: customer.id,
+        status: "PENDING",
+        subtotalAmount: "100.00",
+        discountAmount: "0.00",
+        totalAmount: "100.00",
+        currency: "INR",
+      },
+    });
+    await prisma.payment.create({
+      data: {
+        orderId: order.id,
+        provider: "local-stub",
+        providerPaymentId: `rec_pay_${Date.now()}`,
+        amount: "100.00",
+        currency: "INR",
+        status: "CAPTURED",
+        idempotencyKey: `rec_key_${Date.now()}`,
+      },
+    });
+
+    const recRes = await request(app)
+      .post("/api/v1/webhooks/reconcile")
+      .set("Authorization", `Bearer ${adminLogin.body.accessToken}`);
+    expect(recRes.status).toBe(200);
+    expect(recRes.body.reconciled).toBeGreaterThanOrEqual(1);
+
+    const updated = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect(updated.status).toBe("CONFIRMED");
+  });
 });

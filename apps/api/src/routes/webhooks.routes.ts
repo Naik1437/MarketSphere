@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { authenticate, requireRole } from "../middleware/auth";
 
 export const webhooksRouter = Router();
 
@@ -205,3 +206,37 @@ webhooksRouter.post("/shipping", async (req: Request, res: Response) => {
 
   res.status(200).json({ ok: true, deduplicated: false, status: nextStatus });
 });
+
+webhooksRouter.post(
+  "/reconcile",
+  authenticate,
+  requireRole("ADMIN"),
+  async (_req: Request, res: Response) => {
+    const pendingOrders = await prisma.order.findMany({
+      where: { status: "PENDING" },
+      include: { payments: { take: 1, orderBy: { createdAt: "desc" } } },
+      take: 50,
+    });
+
+    let reconciled = 0;
+    for (const order of pendingOrders) {
+      const pay = order.payments[0];
+      if (!pay) continue;
+      if (pay.status === "CAPTURED") {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: "CONFIRMED" },
+        });
+        reconciled += 1;
+      } else if (pay.status === "FAILED") {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: "CANCELLED" },
+        });
+        reconciled += 1;
+      }
+    }
+
+    res.status(200).json({ ok: true, reconciled });
+  }
+);
