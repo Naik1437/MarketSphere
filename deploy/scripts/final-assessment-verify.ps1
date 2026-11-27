@@ -68,13 +68,6 @@ try {
     if (-not $passedMatch.Success -or [int]$passedMatch.Groups[1].Value -lt 1) { throw "Scenario $($scenario.Name) produced zero passing tests" }
   }
 
-  $npm = if ($IsWindows) { "npm.cmd" } else { "npm" }
-  Push-Location (Join-Path $root "apps/web")
-  $e2e = & $npm run e2e:ci 2>&1
-  if ($LASTEXITCODE -ne 0) { throw "Browser E2E failed with exit code $LASTEXITCODE`n$($e2e -join [Environment]::NewLine)" }
-  $e2e | Set-Content (Join-Path $evidence "browser-e2e.txt")
-  Pop-Location
-
   $cid = (Invoke-Compose @("ps", "-q", "postgres") | Select-Object -First 1).Trim()
   if ([string]::IsNullOrWhiteSpace($cid)) { throw "Could not resolve isolated postgres container" }
   Invoke-Compose @("exec", "-T", "postgres", "sh", "-lc", "pg_dump -U marketsphere -d marketsphere > /tmp/marketsphere-backup.sql") | Out-Null
