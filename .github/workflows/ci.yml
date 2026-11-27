@@ -96,7 +96,7 @@ jobs:
           path: services/python-engine/coverage.xml
 
   browser-e2e:
-    needs: [web, api, python-engine, security-and-compose, browser-e2e]
+    needs: [web, api, python-engine, security-and-compose]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
