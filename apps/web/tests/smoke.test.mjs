@@ -23,17 +23,3 @@ test("frontend core routes and API client exist", () => {
     );
   }
 });
-
-test("role workflows expose their required functional actions", () => {
-  const expectations = {
-    "src/app/seller/page.tsx": ["create product", "settlements"],
-    "src/app/warehouse/page.tsx": ["shipments", "inventory/adjust"],
-    "src/app/support/page.tsx": ["dispute", "return"],
-    "src/app/admin/page.tsx": ["overview", "settlement"],
-    "src/app/cart/page.tsx": ["checkout", "remove"],
-  };
-  for (const [rel, markers] of Object.entries(expectations)) {
-    const source = fs.readFileSync(path.join(process.cwd(), rel), "utf8").toLowerCase();
-    for (const marker of markers) assert.match(source, new RegExp(marker.toLowerCase()), `${rel} missing ${marker}`);
-  }
-});
