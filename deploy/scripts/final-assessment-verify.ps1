@@ -19,7 +19,7 @@ $env:NEXT_PUBLIC_API_URL = "http://localhost:$ApiPort"
 $env:CORS_ORIGIN = "http://localhost:$WebPort"
 
 function Invoke-Native([string]$File, [string[]]$CommandArgs) {
-  $output = & $File @Args 2>&1
+  $output = & $File @CommandArgs 2>&1
   if ($LASTEXITCODE -ne 0) { throw "$File failed with exit code $LASTEXITCODE`n$($output -join [Environment]::NewLine)" }
   return @($output)
 }
@@ -58,6 +58,9 @@ try {
   foreach ($scenario in $scenarios) {
     $scenarioOutput = Invoke-Compose @("exec", "-T", "api", "npx", "vitest", "run", "tests/commerce.test.ts", "tests/webhooks.test.ts", "tests/performance-shipping.test.ts", "--testNamePattern", $scenario.Pattern)
     $scenarioOutput | Set-Content (Join-Path $evidence "$($scenario.Name).log")
+    $scenarioText = $scenarioOutput -join "`n"
+    $passedMatch = [regex]::Match($scenarioText, "(?m)(\d+)\s+passed")
+    if (-not $passedMatch.Success -or [int]$passedMatch.Groups[1].Value -lt 1) { throw "Scenario $($scenario.Name) produced zero passing tests" }
   }
 
   $npm = if ($IsWindows) { "npm.cmd" } else { "npm" }
@@ -75,14 +78,11 @@ try {
   $restoreDb = "restore_verify_$([DateTime]::UtcNow.ToString('HHmmss'))"
   Invoke-Compose @("exec", "-T", "postgres", "createdb", "-U", "marketsphere", $restoreDb) | Out-Null
   Invoke-Compose @("exec", "-T", "postgres", "sh", "-lc", "psql -v ON_ERROR_STOP=1 -U marketsphere -d $restoreDb -f /tmp/marketsphere-backup.sql") | Set-Content (Join-Path $evidence "restore-output.txt")
-  $sql = "SELECT 'Order' || ':' || count(*) FROM `"Order`" UNION ALL SELECT 'Payment' || ':' || count(*) FROM `"Payment`" UNION ALL SELECT 'Refund' || ':' || count(*) FROM `"Refund`" UNION ALL SELECT 'WebhookEvent' || ':' || count(*) FROM `"WebhookEvent`" ORDER BY 1;"
+  $sql = "SELECT 'Order' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"Order`" t UNION ALL SELECT 'Payment' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"Payment`" t UNION ALL SELECT 'Refund' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"Refund`" t UNION ALL SELECT 'WebhookEvent' || ':' || count(*) || ':' || md5(coalesce(string_agg(md5(row_to_json(t)::text), ',' ORDER BY md5(row_to_json(t)::text)), '')) FROM `"WebhookEvent`" t ORDER BY 1;"
   $source = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", "marketsphere", "-tAc", $sql) -join "").Trim()
   $restored = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", $restoreDb, "-tAc", $sql) -join "").Trim()
-  if ($source -ne $restored) { throw "Backup restore count comparison failed`nSOURCE:`n$source`nRESTORED:`n$restored" }
-  $sourceChecksum = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", "marketsphere", "-tAc", "SELECT md5(string_agg(table_name || ':' || row_count, ',' ORDER BY table_name)) FROM (SELECT 'Order' table_name, count(*) row_count FROM `"Order`" UNION ALL SELECT 'Payment', count(*) FROM `"Payment`" UNION ALL SELECT 'Refund', count(*) FROM `"Refund`" UNION ALL SELECT 'WebhookEvent', count(*) FROM `"WebhookEvent`") s;") -join "").Trim()
-  $restoredChecksum = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", $restoreDb, "-tAc", "SELECT md5(string_agg(table_name || ':' || row_count, ',' ORDER BY table_name)) FROM (SELECT 'Order' table_name, count(*) row_count FROM `"Order`" UNION ALL SELECT 'Payment', count(*) FROM `"Payment`" UNION ALL SELECT 'Refund', count(*) FROM `"Refund`" UNION ALL SELECT 'WebhookEvent', count(*) FROM `"WebhookEvent`") s;") -join "").Trim()
-  if ($sourceChecksum -ne $restoredChecksum) { throw "Backup restore checksum comparison failed" }
-  "Backup=$backup`nRestoreDatabase=$restoreDb`nSourceCounts=$source`nRestoredCounts=$restored`nSourceChecksum=$sourceChecksum`nRestoredChecksum=$restoredChecksum" | Set-Content (Join-Path $evidence "backup-restore.txt")
+  if ($source -ne $restored) { throw "Backup restore row-content comparison failed`nSOURCE:`n$source`nRESTORED:`n$restored" }
+  "Backup=$backup`nRestoreDatabase=$restoreDb`nSourceFingerprints=$source`nRestoredFingerprints=$restored" | Set-Content (Join-Path $evidence "backup-restore.txt")
   Invoke-Compose @("logs", "--no-color", "api", "worker") | Set-Content (Join-Path $evidence "service-logs.txt")
 }
 finally {
@@ -90,5 +90,3 @@ finally {
   Stop-Transcript | Out-Null
   if ($Cleanup -and (Get-Command docker -ErrorAction SilentlyContinue)) { Invoke-Compose @("down") }
 }
-
-
