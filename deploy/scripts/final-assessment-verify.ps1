@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Project = "marketsphere-final-assessment-$(Get-Date -Format yyyyMMddHHmmss)",
   [int]$ApiPort = 4400,
   [int]$WebPort = 3300,
@@ -75,12 +75,12 @@ try {
   $restoreDb = "restore_verify_$([DateTime]::UtcNow.ToString('HHmmss'))"
   Invoke-Compose @("exec", "-T", "postgres", "createdb", "-U", "marketsphere", $restoreDb) | Out-Null
   Invoke-Compose @("exec", "-T", "postgres", "sh", "-lc", "psql -v ON_ERROR_STOP=1 -U marketsphere -d $restoreDb -f /tmp/marketsphere-backup.sql") | Set-Content (Join-Path $evidence "restore-output.txt")
-  $sql = "SELECT 'Order' || ':' || count(*) FROM \"Order\" UNION ALL SELECT 'Payment' || ':' || count(*) FROM \"Payment\" UNION ALL SELECT 'Refund' || ':' || count(*) FROM \"Refund\" UNION ALL SELECT 'WebhookEvent' || ':' || count(*) FROM \"WebhookEvent\" ORDER BY 1;"
+  $sql = "SELECT 'Order' || ':' || count(*) FROM `"Order`" UNION ALL SELECT 'Payment' || ':' || count(*) FROM `"Payment`" UNION ALL SELECT 'Refund' || ':' || count(*) FROM `"Refund`" UNION ALL SELECT 'WebhookEvent' || ':' || count(*) FROM `"WebhookEvent`" ORDER BY 1;"
   $source = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", "marketsphere", "-tAc", $sql) -join "").Trim()
   $restored = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", $restoreDb, "-tAc", $sql) -join "").Trim()
   if ($source -ne $restored) { throw "Backup restore count comparison failed`nSOURCE:`n$source`nRESTORED:`n$restored" }
-  $sourceChecksum = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", "marketsphere", "-tAc", "SELECT md5(string_agg(table_name || ':' || row_count, ',' ORDER BY table_name)) FROM (SELECT 'Order' table_name, count(*) row_count FROM \"Order\" UNION ALL SELECT 'Payment', count(*) FROM \"Payment\" UNION ALL SELECT 'Refund', count(*) FROM \"Refund\" UNION ALL SELECT 'WebhookEvent', count(*) FROM \"WebhookEvent\") s;") -join "").Trim()
-  $restoredChecksum = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", $restoreDb, "-tAc", "SELECT md5(string_agg(table_name || ':' || row_count, ',' ORDER BY table_name)) FROM (SELECT 'Order' table_name, count(*) row_count FROM \"Order\" UNION ALL SELECT 'Payment', count(*) FROM \"Payment\" UNION ALL SELECT 'Refund', count(*) FROM \"Refund\" UNION ALL SELECT 'WebhookEvent', count(*) FROM \"WebhookEvent\") s;") -join "").Trim()
+  $sourceChecksum = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", "marketsphere", "-tAc", "SELECT md5(string_agg(table_name || ':' || row_count, ',' ORDER BY table_name)) FROM (SELECT 'Order' table_name, count(*) row_count FROM `"Order`" UNION ALL SELECT 'Payment', count(*) FROM `"Payment`" UNION ALL SELECT 'Refund', count(*) FROM `"Refund`" UNION ALL SELECT 'WebhookEvent', count(*) FROM `"WebhookEvent`") s;") -join "").Trim()
+  $restoredChecksum = (Invoke-Compose @("exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "marketsphere", "-d", $restoreDb, "-tAc", "SELECT md5(string_agg(table_name || ':' || row_count, ',' ORDER BY table_name)) FROM (SELECT 'Order' table_name, count(*) row_count FROM `"Order`" UNION ALL SELECT 'Payment', count(*) FROM `"Payment`" UNION ALL SELECT 'Refund', count(*) FROM `"Refund`" UNION ALL SELECT 'WebhookEvent', count(*) FROM `"WebhookEvent`") s;") -join "").Trim()
   if ($sourceChecksum -ne $restoredChecksum) { throw "Backup restore checksum comparison failed" }
   "Backup=$backup`nRestoreDatabase=$restoreDb`nSourceCounts=$source`nRestoredCounts=$restored`nSourceChecksum=$sourceChecksum`nRestoredChecksum=$restoredChecksum" | Set-Content (Join-Path $evidence "backup-restore.txt")
   Invoke-Compose @("logs", "--no-color", "api", "worker") | Set-Content (Join-Path $evidence "service-logs.txt")
@@ -90,3 +90,4 @@ finally {
   Stop-Transcript | Out-Null
   if ($Cleanup -and (Get-Command docker -ErrorAction SilentlyContinue)) { Invoke-Compose @("down") }
 }
+
