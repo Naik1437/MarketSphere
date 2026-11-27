@@ -1,0 +1,13 @@
+Command: npm.cmd test
+Working directory: apps/web
+Date: 2026-11-27
+
+> marketsphere-web@0.1.0 test
+> node --test tests/smoke.test.mjs
+
+✔ frontend core routes and API client exist
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+
+This is a repository smoke test, not a browser-driven E2E run. Playwright E2E remains externally dependent on a running stack and browser package availability.
