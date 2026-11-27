@@ -48,7 +48,7 @@ describe("A08 provider adapters", () => {
 
   it("uses unique event-based email idempotency keys", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test_unit"); vi.stubEnv("EMAIL_FROM", "noreply@example.test");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "email-1" }), { status: 200 }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ id: "email-1" }), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify({ id: "email-2" }), { status: 200 }));
     await new ResendEmailProvider().send({ to: "a@example.test", subject: "s", body: "b", eventId: "evt-1" });
     await new ResendEmailProvider().send({ to: "a@example.test", subject: "s", body: "b", eventId: "evt-2" });
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ "Idempotency-Key": "email-evt-1" });
@@ -63,7 +63,7 @@ describe("A08 provider adapters", () => {
     const result = await new SupabaseStorageProvider().putObject("a.txt", "text/plain", bytes);
     expect(result.url).toBe("storage://private/a.txt");
     expect(result.publicUrl).toBeUndefined();
-    expect((fetchMock.mock.calls[1][1] as RequestInit).body).toEqual(bytes);
+    expect(new Uint8Array((fetchMock.mock.calls[1][1] as RequestInit).body as ArrayBuffer)).toEqual(bytes);
     fetchMock.mockRestore(); vi.unstubAllEnvs();
   });
 });

@@ -36,7 +36,7 @@ export class SupabaseStorageProvider implements ObjectStorageProvider {
     const response = await requestWithRetry(`${base}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeURIComponent(key)}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, "Content-Type": contentType, "x-upsert": "false", "Idempotency-Key": `object-${key}` },
-      body: content,
+      body: Uint8Array.from(content).buffer,
     });
     if (!response.ok) await providerError(response);
     return bucketInfo.public
