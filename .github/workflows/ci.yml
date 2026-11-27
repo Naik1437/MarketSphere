@@ -51,7 +51,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - run: pytest
+      - run: python -m pytest
 
   security-and-compose:
     runs-on: ubuntu-latest
