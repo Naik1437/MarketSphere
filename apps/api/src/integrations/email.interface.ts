@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { providerError, requestWithRetry } from "./http-client";
 
 export interface EmailMessage {
   to: string;
   subject: string;
   body: string;
+  eventId?: string;
 }
 
 export interface EmailProvider {
@@ -26,7 +28,7 @@ export class ResendEmailProvider implements EmailProvider {
     if (!key || !from) throw new Error("RESEND_API_KEY and EMAIL_FROM are required");
     const response = await requestWithRetry("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "Idempotency-Key": `email-${msg.to}-${msg.subject}` },
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "Idempotency-Key": `email-${msg.eventId ?? randomUUID()}` },
       body: JSON.stringify({ from, to: [msg.to], subject: msg.subject, text: msg.body }),
     });
     if (!response.ok) await providerError(response);

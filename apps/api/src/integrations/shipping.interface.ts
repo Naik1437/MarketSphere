@@ -29,6 +29,9 @@ export class HttpShippingProvider implements ShippingProvider {
     const endpoint = process.env.SHIPPING_PROVIDER_URL;
     const token = process.env.SHIPPING_PROVIDER_TOKEN;
     if (!endpoint || !token) throw new Error("SHIPPING_PROVIDER_URL and SHIPPING_PROVIDER_TOKEN are required");
+    let parsedEndpoint: URL;
+    try { parsedEndpoint = new URL(endpoint); } catch { throw new Error("SHIPPING_PROVIDER_URL must be a valid HTTPS URL"); }
+    if (parsedEndpoint.protocol !== "https:") throw new Error("SHIPPING_PROVIDER_URL must use HTTPS");
     const response = await requestWithRetry(endpoint, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": `label-${req.orderId}` },
@@ -38,6 +41,7 @@ export class HttpShippingProvider implements ShippingProvider {
     const result = (await response.json()) as { trackingNumber?: string; tracking_number?: string; status?: string };
     const trackingNumber = result.trackingNumber ?? result.tracking_number;
     if (!trackingNumber) throw new Error("Shipping provider response omitted tracking number");
+    if (result.status && !["LABEL_CREATED", "label_created", "created"].includes(result.status)) throw new Error(`Shipping provider returned unsupported status: ${result.status}`);
     return { trackingNumber, status: "LABEL_CREATED" };
   }
 }

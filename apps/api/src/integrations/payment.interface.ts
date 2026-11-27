@@ -30,7 +30,7 @@ export class LocalStubPaymentProvider implements PaymentProvider {
 export class StripeTestPaymentProvider implements PaymentProvider {
   async authorize(req: PaymentAuthRequest): Promise<PaymentAuthResult> {
     const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) throw new Error("STRIPE_SECRET_KEY is required for Stripe test mode");
+    if (!key || !key.startsWith("sk_test_")) throw new Error("STRIPE_SECRET_KEY must be a Stripe test-mode sk_test_ key");
     const body = new URLSearchParams({
       amount: String(Math.round(req.amount * 100)),
       currency: req.currency.toLowerCase(),
@@ -45,7 +45,8 @@ export class StripeTestPaymentProvider implements PaymentProvider {
     });
     if (!response.ok) await providerError(response);
     const result = (await response.json()) as { id: string; status: string };
-    return { provider: "stripe", providerPaymentId: result.id, status: result.status === "succeeded" ? "CAPTURED" : "AUTHORIZED" };
+    const status = result.status === "succeeded" ? "CAPTURED" : result.status === "requires_capture" ? "AUTHORIZED" : "FAILED";
+    return { provider: "stripe", providerPaymentId: result.id, status };
   }
 }
 
