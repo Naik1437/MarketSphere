@@ -16,8 +16,22 @@
         "scheme": "bearer",
         "bearerFormat": "JWT"
       }
+    },
+    "schemas": {
+      "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "string" } } },
+      "Order": { "type": "object", "properties": { "id": { "type": "string" }, "orderNumber": { "type": "string" }, "status": { "type": "string" }, "totalAmount": { "type": "string" } } },
+      "Product": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "category": { "type": "string" }, "status": { "type": "string" } } },
+      "CheckoutRequest": { "type": "object", "required": ["warehouseId", "idempotencyKey", "items"], "properties": { "warehouseId": { "type": "string" }, "idempotencyKey": { "type": "string" }, "promotionCode": { "type": "string" }, "items": { "type": "array", "items": { "type": "object", "required": ["skuId", "quantity"], "properties": { "skuId": { "type": "string" }, "quantity": { "type": "integer", "minimum": 1 } } } } } },
+      "RecommendationRequest": { "type": "object", "properties": { "user_id": { "type": "string" }, "viewed_categories": { "type": "array", "items": { "type": "string" } }, "purchased_skus": { "type": "array", "items": { "type": "string" } }, "catalog": { "type": "array", "items": { "type": "object" } }, "limit": { "type": "integer", "minimum": 1, "maximum": 20 } } }
+    },
+    "parameters": {
+      "sellerId": { "name": "sellerId", "in": "path", "required": true, "schema": { "type": "string" } },
+      "productId": { "name": "productId", "in": "path", "required": true, "schema": { "type": "string" } },
+      "page": { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1 } },
+      "limit": { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50 } }
     }
   },
+  "security": [{ "bearerAuth": [] }],
   "paths": {
     "/health": { "get": { "summary": "API Health & DB/Redis Readiness", "responses": { "200": { "description": "Healthy" } } } },
     "/api/v1/auth/login": { "post": { "summary": "Login with email and password", "responses": { "200": { "description": "JWT access & refresh tokens" } } } },
@@ -47,6 +61,32 @@
     "/api/v1/webhooks/shipping": { "post": { "summary": "Signed shipping webhook", "responses": { "200": { "description": "Processed or deduplicated" } } } },
     "/api/v1/pricing/calculate": { "post": { "summary": "Python deterministic pricing & commission", "responses": { "200": { "description": "Calculated" } } } },
     "/api/v1/catalog/normalize": { "post": { "summary": "Python bulk catalog normalization", "responses": { "200": { "description": "Normalized" } } } },
-    "/api/v1/recommendations": { "post": { "summary": "FastAPI product recommendations", "responses": { "200": { "description": "Recommendations" } } } }
+    "/api/v1/recommendations": { "get": { "security": [], "summary": "Cold-start recommendations", "responses": { "200": { "description": "Recommendations" } } }, "post": { "security": [], "summary": "FastAPI product recommendations", "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecommendationRequest" } } } }, "responses": { "200": { "description": "Recommendations" } } } },
+    "/metrics": { "get": { "security": [], "summary": "API metrics", "responses": { "200": { "description": "Metrics" } } } },
+    "/api/v1/auth/admin-check": { "get": { "summary": "Admin authorization check", "responses": { "200": { "description": "Allowed" }, "403": { "description": "Forbidden" } } } },
+    "/api/v1/auth/warehouse-check": { "get": { "summary": "Warehouse authorization check", "responses": { "200": { "description": "Allowed" } } } },
+    "/api/v1/auth/support-check": { "get": { "summary": "Support authorization check", "responses": { "200": { "description": "Allowed" } } } },
+    "/api/v1/auth/sellers/{sellerId}/scope": { "get": { "summary": "Seller ownership scope", "parameters": [{ "$ref": "#/components/parameters/sellerId" }], "responses": { "200": { "description": "Allowed" } } } },
+    "/api/v1/auth/customers/{customerId}/scope": { "get": { "summary": "Customer ownership scope", "parameters": [{ "name": "customerId", "in": "path", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Allowed" } } } },
+    "/api/v1/products/mine": { "get": { "summary": "Seller catalog", "responses": { "200": { "description": "Products" } } } },
+    "/api/v1/products/{productId}": { "get": { "security": [], "summary": "Product detail", "parameters": [{ "$ref": "#/components/parameters/productId" }], "responses": { "200": { "description": "Product", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Product" } } } } } }, "patch": { "summary": "Update product", "responses": { "200": { "description": "Updated" } } } },
+    "/api/v1/products/skus/{skuId}": { "patch": { "summary": "Update SKU", "responses": { "200": { "description": "Updated" } } } },
+    "/api/v1/inventory/warehouses": { "get": { "summary": "List warehouses", "responses": { "200": { "description": "Warehouses" } } } },
+    "/api/v1/inventory/skus": { "get": { "summary": "Search SKUs", "responses": { "200": { "description": "SKUs" } } } },
+    "/api/v1/inventory/{skuId}": { "get": { "summary": "SKU inventory", "responses": { "200": { "description": "Inventory" } } } },
+    "/api/v1/cart/items/{skuId}": { "delete": { "summary": "Remove cart item", "responses": { "200": { "description": "Removed" } } } },
+    "/api/v1/orders": { "get": { "summary": "Scoped order list", "responses": { "200": { "description": "Orders" } } } },
+    "/api/v1/orders/{orderId}": { "get": { "summary": "Scoped order detail", "responses": { "200": { "description": "Order", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Order" } } } } } } },
+    "/api/v1/orders/{orderId}/status": { "patch": { "summary": "Advance order state", "responses": { "200": { "description": "Updated" }, "409": { "description": "Invalid transition" } } } },
+    "/api/v1/orders/{orderId}/returns": { "post": { "summary": "Request return", "responses": { "201": { "description": "Requested" } } } },
+    "/api/v1/returns": { "get": { "summary": "List returns", "responses": { "200": { "description": "Returns" } } } },
+    "/api/v1/returns/{returnId}/status": { "patch": { "summary": "Update return", "responses": { "200": { "description": "Updated" } } } },
+    "/api/v1/orders/{orderId}/disputes": { "post": { "summary": "Raise dispute", "responses": { "201": { "description": "Opened" } } } },
+    "/api/v1/disputes": { "get": { "summary": "List disputes", "responses": { "200": { "description": "Disputes" } } } },
+    "/api/v1/disputes/{disputeId}/status": { "patch": { "summary": "Update dispute", "responses": { "200": { "description": "Updated" } } } },
+    "/api/v1/promotions": { "get": { "summary": "List promotions", "responses": { "200": { "description": "Promotions" } } }, "post": { "summary": "Create promotion", "responses": { "201": { "description": "Created" } } } },
+    "/api/v1/admin/overview": { "get": { "summary": "Admin overview", "responses": { "200": { "description": "Overview" } } } },
+    "/api/v1/sellers/{sellerId}": { "get": { "summary": "Seller detail", "parameters": [{ "$ref": "#/components/parameters/sellerId" }], "responses": { "200": { "description": "Seller" } } } },
+    "/api/v1/sellers/{sellerId}/settlements": { "get": { "summary": "Seller settlements", "responses": { "200": { "description": "Settlements" } } } }
   }
 }

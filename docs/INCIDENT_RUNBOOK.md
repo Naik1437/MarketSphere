@@ -8,3 +8,7 @@
 | **4. Slow Search** | Unindexed catalog queries. | Composite index `@@index([category, status])` on `Product` + pagination (`limit <= 50`). | `GET /api/v1/products` paginated response. |
 | **5. Failed Shipping Callback** | Invalid signature or transient carrier failure. | `verifySignature` rejects forged payloads (`401`); `ShipmentStatus.FAILED` recorded safely. | `webhooks.test.ts` invalid signature test (`401`). |
 | **6. Duplicate Refunds** | Support agent or retry submitting same refund twice. | `Refund.idempotencyKey` unique constraint + captured-amount guard. | `commerce.test.ts`: duplicate refund returns `200 deduplicated: true`. |
+
+## Evidence boundary
+
+The verification column identifies automated regression coverage committed in the repository. It is not a claim that a production incident was replayed. Runtime replay of all six scenarios, including logs, database snapshots, recovery commands, and post-recovery checks, was not possible on 2026-11-27 because Docker and the PostgreSQL/Redis runtime were unavailable. See `docs/evidence/a15-simulation-status.md`.

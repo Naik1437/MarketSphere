@@ -37,6 +37,15 @@
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\"limit\":4}" }
       }
-    }
+    },
+    { "name": "Inventory SKUs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/inventory/skus" } },
+    { "name": "Customer Cart", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/cart" } },
+    { "name": "Checkout", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "url": "{{apiUrl}}/api/v1/orders/checkout", "body": { "mode": "raw", "raw": "{\"warehouseId\":\"<warehouse-id>\",\"idempotencyKey\":\"postman-checkout-001\",\"items\":[{\"skuId\":\"<sku-id>\",\"quantity\":1}]}" } } },
+    { "name": "Order List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders" } },
+    { "name": "Inventory Adjustment", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "url": "{{apiUrl}}/api/v1/inventory/adjust", "body": { "mode": "raw", "raw": "{\"skuId\":\"<sku-id>\",\"warehouseId\":\"<warehouse-id>\",\"quantityDelta\":10,\"movementType\":\"RESTOCK\",\"idempotencyKey\":\"postman-restock-001\"}" } } },
+    { "name": "Payment Webhook", "request": { "method": "POST", "header": [{ "key": "x-webhook-signature", "value": "<hmac-sha256>" }, { "key": "Content-Type", "value": "application/json" }], "url": "{{apiUrl}}/api/v1/webhooks/payment", "body": { "mode": "raw", "raw": "{\"eventId\":\"evt-postman-001\",\"providerPaymentId\":\"<provider-payment-id>\",\"eventType\":\"payment.captured\"}" } } },
+    { "name": "Shipping Webhook", "request": { "method": "POST", "header": [{ "key": "x-webhook-signature", "value": "<hmac-sha256>" }, { "key": "Content-Type", "value": "application/json" }], "url": "{{apiUrl}}/api/v1/webhooks/shipping", "body": { "mode": "raw", "raw": "{\"eventId\":\"evt-postman-ship-001\",\"trackingNumber\":\"<tracking-number>\",\"eventType\":\"shipment.in_transit\"}" } } },
+    { "name": "Python Pricing", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{pythonUrl}}/api/v1/pricing/calculate", "body": { "mode": "raw", "raw": "{\"items\":[{\"sku_code\":\"DEMO-001\",\"unit_price\":100,\"quantity\":2}]}" } } },
+    { "name": "Catalog Normalize", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{pythonUrl}}/api/v1/catalog/normalize", "body": { "mode": "raw", "raw": "{\"rows\":[{\"sku_code\":\" demo-001 \",\"name\":\"Demo Item\",\"category\":\"home\",\"price\":100}]}" } } }
   ]
 }
