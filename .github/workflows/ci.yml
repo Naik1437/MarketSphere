@@ -136,7 +136,7 @@ jobs:
         run: cd apps/web && npm ci && npm audit --audit-level=high
 
   docker-build-and-publish:
-    needs: [web, api, python-engine, security-and-compose]
+    needs: [web, api, python-engine, security-and-compose, browser-e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: read
