@@ -16,13 +16,21 @@ export function signWebhookPayload(payload: string): string {
     .digest("hex");
 }
 
-function verifySignature(rawBody: string, signature: string | undefined): boolean {
+function verifySignature(rawBody: Buffer, signature: string | undefined): boolean {
   if (!signature) return false;
-  const expected = signWebhookPayload(rawBody);
+  const expected = crypto
+    .createHmac("sha256", WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest("hex");
   const a = Buffer.from(expected, "hex");
   const b = Buffer.from(signature, "hex");
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+function getRawBody(req: Request): Buffer {
+  const raw = (req as Request & { rawBody?: Buffer }).rawBody;
+  return raw ?? Buffer.from(JSON.stringify(req.body));
 }
 
 const paymentWebhookSchema = z.object({
@@ -79,8 +87,7 @@ async function acquireWebhookEvent(
 
 webhooksRouter.post("/payment", async (req: Request, res: Response) => {
   const sig = req.header("x-webhook-signature");
-  const rawBody = JSON.stringify(req.body);
-  if (!verifySignature(rawBody, sig)) {
+  if (!verifySignature(getRawBody(req), sig)) {
     res.status(401).json({ error: "Invalid webhook signature" });
     return;
   }
@@ -141,8 +148,7 @@ webhooksRouter.post("/payment", async (req: Request, res: Response) => {
 
 webhooksRouter.post("/shipping", async (req: Request, res: Response) => {
   const sig = req.header("x-webhook-signature");
-  const rawBody = JSON.stringify(req.body);
-  if (!verifySignature(rawBody, sig)) {
+  if (!verifySignature(getRawBody(req), sig)) {
     res.status(401).json({ error: "Invalid webhook signature" });
     return;
   }

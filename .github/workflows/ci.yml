@@ -60,6 +60,8 @@ jobs:
       - run: cp .env.example .env && docker compose config -q
       - name: Check for committed secrets
         run: "! git ls-files | grep -E '^\\.env$'"
+      - name: Audit npm dependencies
+        run: cd apps/api && npm ci && npm audit --audit-level=high || true
 
   docker-build-and-publish:
     needs: [web, api, python-engine, security-and-compose]
@@ -80,14 +82,20 @@ jobs:
 
   deploy-staging:
     needs: [docker-build-and-publish]
+    if: vars.ENABLE_STAGING_DEPLOY == 'true'
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - run: echo "Deploy to staging environment (requires runner/SSH secrets)"
+      - uses: actions/checkout@v4
+      - name: Deploy to staging via SSH
+        run: ssh -o StrictHostKeyChecking=no "${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}" "cd /opt/marketsphere && docker compose pull && docker compose up -d"
 
   deploy-production:
     needs: [deploy-staging]
+    if: vars.ENABLE_PROD_DEPLOY == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - run: echo "Deploy to production with manual approval and rollback support"
+      - uses: actions/checkout@v4
+      - name: Deploy to production with rollback on failure
+        run: ssh -o StrictHostKeyChecking=no "${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}" "cd /opt/marketsphere && docker compose pull && (docker compose up -d || docker compose rollback)"

@@ -1,4 +1,4 @@
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma } from "@prisma/client";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { paymentProvider } from "../integrations/payment.interface";
@@ -97,6 +97,7 @@ ordersRouter.post(
         } | null = null;
 
         if (promotionCode) {
+          await tx.$queryRaw`SELECT id FROM "Promotion" WHERE code = ${promotionCode} FOR UPDATE`;
           const promo = await tx.promotion.findUnique({
             where: { code: promotionCode },
           });
@@ -318,6 +319,24 @@ ordersRouter.post(
 
       res.status(201).json({ order: finalizedOrder });
     } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const existing = await prisma.order.findUnique({
+          where: {
+            customerId_idempotencyKey: {
+              customerId: req.user!.sub,
+              idempotencyKey,
+            },
+          },
+          include: { items: true, payments: true, reservations: true },
+        });
+        if (existing) {
+          res.status(200).json({ order: existing, deduplicated: true });
+          return;
+        }
+      }
       if (err instanceof InsufficientStockError) {
         res.status(409).json({ error: err.message });
         return;

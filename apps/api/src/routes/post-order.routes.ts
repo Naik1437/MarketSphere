@@ -352,17 +352,21 @@ postOrderRouter.post(
     }
 
     const { sellerId } = parsed.data;
-    const unsettled = await prisma.commission.findMany({
-      where: { sellerId, settlementId: null },
-    });
-
-    const totalAmount = unsettled.reduce(
-      (sum, c) => sum + Number(c.netSellerAmount),
-      0
-    );
-
-    const now = new Date();
     const settlement = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Seller" WHERE id = ${sellerId} FOR UPDATE`;
+      const unsettled = await tx.commission.findMany({
+        where: { sellerId, settlementId: null },
+      });
+      if (unsettled.length === 0) {
+        return null;
+      }
+
+      const totalAmount = unsettled.reduce(
+        (sum, c) => sum + Number(c.netSellerAmount),
+        0
+      );
+
+      const now = new Date();
       const created = await tx.settlement.create({
         data: {
           sellerId,
@@ -372,14 +376,17 @@ postOrderRouter.post(
           periodEnd: now,
         },
       });
-      if (unsettled.length > 0) {
-        await tx.commission.updateMany({
-          where: { id: { in: unsettled.map((c) => c.id) } },
-          data: { settlementId: created.id },
-        });
-      }
+      await tx.commission.updateMany({
+        where: { id: { in: unsettled.map((c) => c.id) } },
+        data: { settlementId: created.id },
+      });
       return created;
     });
+
+    if (!settlement) {
+      res.status(409).json({ error: "No unsettled commissions for seller" });
+      return;
+    }
 
     res.status(201).json({ settlement });
   }

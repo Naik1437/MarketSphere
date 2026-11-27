@@ -23,6 +23,33 @@ const envSchema = z.object({
     .default("local_dev_refresh_secret_change_me"),
   JWT_ACCESS_TTL: z.string().default("15m"),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  WEBHOOK_SIGNING_SECRET: z
+    .string()
+    .min(16)
+    .default("local_dev_webhook_secret_change_me"),
 });
 
-export const env = envSchema.parse(process.env);
+export const env = envSchema
+  .superRefine((val, ctx) => {
+    if (val.NODE_ENV === "production") {
+      if (val.JWT_ACCESS_SECRET.includes("change_me")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "JWT_ACCESS_SECRET must be set in production",
+        });
+      }
+      if (val.JWT_REFRESH_SECRET.includes("change_me")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "JWT_REFRESH_SECRET must be set in production",
+        });
+      }
+      if (val.WEBHOOK_SIGNING_SECRET.includes("change_me")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "WEBHOOK_SIGNING_SECRET must be set in production",
+        });
+      }
+    }
+  })
+  .parse(process.env);

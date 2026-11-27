@@ -16,7 +16,13 @@ import { webhooksRouter } from "./routes/webhooks.routes";
 export const app = express();
 
 app.use(cors({ origin: env.CORS_ORIGIN }));
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  })
+);
 
 let totalRequests = 0;
 app.use((req: Request, res: Response, next: NextFunction) => {
