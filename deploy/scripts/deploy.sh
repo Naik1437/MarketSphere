@@ -9,10 +9,11 @@ if [ -f "$PREV_FILE" ]; then
 fi
 
 export IMAGE_TAG="$NEW_TAG"
+export IMAGE_OWNER="${IMAGE_OWNER:-naik1437}"
 docker compose pull
 docker compose up -d
 
-if curl -fsS http://localhost:4000/health >/dev/null && curl -fsS http://localhost:3000/api/health >/dev/null; then
+if curl -fsS http://localhost:4000/health >/dev/null && curl -fsS http://localhost:3000/api/health >/dev/null && curl -fsS http://localhost:8000/health >/dev/null; then
   echo "$NEW_TAG" > "$PREV_FILE"
   echo "Deployment of $NEW_TAG succeeded and passed health checks."
   exit 0

@@ -43,6 +43,18 @@ Multi-Vendor Commerce, Inventory & Order Platform.
 - **API**: `cd apps/api && npm install && npx prisma generate && npm run typecheck && npm run build`
 - **Python Engine**: `cd services/python-engine && pip install -r requirements.txt && pytest`
 
+## Final assessment verification
+
+Run the isolated verification batch from PowerShell. It uses a separate Compose project and leaves the existing demonstration project untouched:
+
+```powershell
+.\deploy\scripts\final-assessment-verify.ps1
+```
+
+Use `-Cleanup` only for the isolated project created by that command. The script captures API incident tests, Playwright workflows, service logs, health samples, database state, and a PostgreSQL backup under `docs/evidence/runtime-*`.
+
+For a deployed host, publish the GHCR images, set `IMAGE_OWNER` and `IMAGE_TAG`, then run `deploy/scripts/deploy.sh <tag>`. Configure the `staging` and `production` GitHub environments with SSH secrets and required reviewers; these external credentials are not stored in this repository.
+
 ## Security & Secrets
 
 - Never commit `.env` or real credentials.
