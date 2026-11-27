@@ -18,13 +18,13 @@ $env:MARKETSPHERE_WEB_URL = "http://localhost:$WebPort"
 $env:NEXT_PUBLIC_API_URL = "http://localhost:$ApiPort"
 $env:CORS_ORIGIN = "http://localhost:$WebPort"
 
-function Invoke-Native([string]$File, [string[]]$Args) {
+function Invoke-Native([string]$File, [string[]]$CommandArgs) {
   $output = & $File @Args 2>&1
   if ($LASTEXITCODE -ne 0) { throw "$File failed with exit code $LASTEXITCODE`n$($output -join [Environment]::NewLine)" }
   return @($output)
 }
-function Invoke-Docker([string[]]$Args) { Invoke-Native "docker" $Args }
-function Invoke-Compose([string[]]$Args) { Invoke-Docker ($compose + $Args) }
+function Invoke-Docker([string[]]$CommandArgs) { Invoke-Native "docker" $CommandArgs }
+function Invoke-Compose([string[]]$CommandArgs) { Invoke-Docker ($compose + $CommandArgs) }
 function Wait-Ready([string]$Url) {
   for ($attempt = 1; $attempt -le 40; $attempt++) {
     try {
@@ -90,4 +90,5 @@ finally {
   Stop-Transcript | Out-Null
   if ($Cleanup -and (Get-Command docker -ErrorAction SilentlyContinue)) { Invoke-Compose @("down") }
 }
+
 
