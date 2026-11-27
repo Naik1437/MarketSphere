@@ -8,7 +8,9 @@
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
-    "test": "node --test tests/smoke.test.mjs"
+    "test": "node --test tests/smoke.test.mjs",
+    "test:coverage": "node --test --experimental-test-coverage tests/smoke.test.mjs",
+    "e2e:ci": "node e2e/marketplace.mjs && node e2e/gaps.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.66.0",

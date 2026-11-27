@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = process.env.MARKETSPHERE_WEB_URL || "http://localhost:3000";
 const PASS = process.env.DEMO_SEED_PASSWORD || "DemoPass!2026";
 
 async function loginViaUI(page, email) {
