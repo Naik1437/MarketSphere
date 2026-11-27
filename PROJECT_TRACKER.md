@@ -10,7 +10,7 @@ Foundation initialized. This tracker records requirement and assessment progress
 | A04 | Marketplace security (Auth & RBAC) | Foundation | Login, logout, refresh rotation/reuse detection, bcrypt, rate limiting, RBAC & ownership middleware |
 | A09 | Docker marketplace environment | Foundation | `docker-compose.yml` with internal `data_net`, persistent volumes, healthchecks |
 | A10 | Git collaboration and reviews | Foundation | `.gitignore`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/CODEOWNERS` |
-| A11 | Marketplace CI/CD | Partial | `.github/workflows/ci.yml` runs web/API/Python tests, coverage, isolated browser E2E, security audits, GHCR publication, and gated SSH deployment; host secrets remain external |
+| A11 | Marketplace CI/CD | Partial | `.github/workflows/ci.yml` runs web/API/Python tests, coverage, isolated browser E2E, security audits, GHCR publication, and gated SSH deployment; publication now requires browser E2E; host secrets remain external |
 | G02–G08 | Core stack & engineering practices | Foundation | Next.js + Express/Prisma/Zod/BullMQ + FastAPI/Pydantic/pytest + `.env.example` |
 | G14 | Foundation documentation | Foundation | `README.md` and `PROJECT_TRACKER.md` |
 
@@ -26,7 +26,7 @@ Foundation initialized. This tracker records requirement and assessment progress
 - **A08** Commerce third-party integrations — Blocked (no free external sandbox credentials available; adapters remain explicitly local simulations; see `docs/evidence/a08-sandbox-status.md`)
 - **A09** Docker marketplace environment — Complete (Compose services, healthchecks, persistent volumes, and isolated verification script)
 - **A10** Git collaboration and reviews — Complete (protected main, PR workflow, CODEOWNERS, and review template)
-- **A11** Marketplace CI/CD — Partial (verified main run, GHCR publication, coverage artifacts, browser-E2E job, and gated SSH deployment; host secrets remain external)
+- **A11** Marketplace CI/CD — Partial (verified main run, GHCR publication, coverage artifacts, browser-E2E-gated publication, and gated SSH deployment; staging/production secrets remain external)
 - **A12** Commerce test suite — Partial (API 20/20, regression 5/5, Python 4/4, browser 13/13 supplied; CI executes isolated seeded Playwright and coverage, while live incident replay remains environment-dependent)
 - **A13** Marketplace API documentation — Partial (OpenAPI and Postman artifacts exist but still require full endpoint/schema/example parity)
 - **A14** Marketplace deployment — Partial (GHCR-aware deploy/rollback, HTTPS Nginx config, health monitor, backup/restore scripts; live host, certificates, and restore execution remain external)
