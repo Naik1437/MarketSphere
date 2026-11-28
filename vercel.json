@@ -1,0 +1,31 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "apps/web",
+      "framework": "nextjs"
+    },
+    "api": {
+      "root": "apps/api",
+      "framework": "express",
+      "entrypoint": "src/vercel.ts",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "python-engine",
+          "format": "url",
+          "env": "PYTHON_ENGINE_URL"
+        }
+      ]
+    },
+    "python-engine": {
+      "root": "services/python-engine",
+      "framework": "fastapi",
+      "entrypoint": "app.main:app"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
+}

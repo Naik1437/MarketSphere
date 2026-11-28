@@ -1,5 +1,8 @@
+// Production Vercel traffic is same-origin and is routed by vercel.json.
+// Docker/local deployments continue to provide NEXT_PUBLIC_API_URL explicitly.
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:4000");
 
 export const STORAGE_KEYS = {
   accessToken: "ms_access_token",
