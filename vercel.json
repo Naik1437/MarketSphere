@@ -8,9 +8,10 @@
     "api": {
       "root": "apps/api",
       "framework": "express",
-      "entrypoint": "dist/vercel.js",
+      "entrypoint": "src/vercel.ts",
       "installCommand": "npm ci --include=dev",
       "buildCommand": "npm run build",
+      "includeFiles": ["node_modules/**", "prisma/**"],
       "bindings": [
         {
           "type": "service",
