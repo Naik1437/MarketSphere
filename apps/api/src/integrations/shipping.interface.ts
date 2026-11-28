@@ -1,5 +1,4 @@
-// Pending external sandbox integration (Assessment 08).
-// This interface defines the contract; LocalStubShippingProvider is a local-only stub.
+import { providerError, requestWithRetry } from "./http-client";
 
 export interface ShipmentCreateRequest {
   orderId: string;
@@ -25,4 +24,28 @@ export class LocalStubShippingProvider implements ShippingProvider {
   }
 }
 
-export const shippingProvider: ShippingProvider = new LocalStubShippingProvider();
+export class HttpShippingProvider implements ShippingProvider {
+  async createLabel(req: ShipmentCreateRequest): Promise<ShipmentCreateResult> {
+    const endpoint = process.env.SHIPPING_PROVIDER_URL;
+    const token = process.env.SHIPPING_PROVIDER_TOKEN;
+    if (!endpoint || !token) throw new Error("SHIPPING_PROVIDER_URL and SHIPPING_PROVIDER_TOKEN are required");
+    let parsedEndpoint: URL;
+    try { parsedEndpoint = new URL(endpoint); } catch { throw new Error("SHIPPING_PROVIDER_URL must be a valid HTTPS URL"); }
+    if (parsedEndpoint.protocol !== "https:") throw new Error("SHIPPING_PROVIDER_URL must use HTTPS");
+    const response = await requestWithRetry(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": `label-${req.orderId}` },
+      body: JSON.stringify(req),
+    });
+    if (!response.ok) await providerError(response);
+    const result = (await response.json()) as { trackingNumber?: string; tracking_number?: string; status?: string };
+    const trackingNumber = result.trackingNumber ?? result.tracking_number;
+    if (!trackingNumber) throw new Error("Shipping provider response omitted tracking number");
+    if (result.status && !["LABEL_CREATED", "label_created", "created"].includes(result.status)) throw new Error(`Shipping provider returned unsupported status: ${result.status}`);
+    return { trackingNumber, status: "LABEL_CREATED" };
+  }
+}
+
+export const shippingProvider: ShippingProvider = process.env.SHIPPING_PROVIDER_URL && process.env.SHIPPING_PROVIDER_TOKEN
+  ? new HttpShippingProvider()
+  : new LocalStubShippingProvider();

@@ -23,7 +23,7 @@ Foundation initialized. This tracker records requirement and assessment progress
 - **A05** Python pricing and feed engine — Partial (checkout integration and deterministic normalization present; external runtime evidence is limited)
 - **A06** FastAPI recommendation service — Partial (synthetic fallback and catalog input present; real customer-history integration is not demonstrated)
 - **A07** Inventory reservation engine — Partial (row locking, ledger idempotency, expiry, and regression coverage present; full lifecycle evidence remains)
-- **A08** Commerce third-party integrations — Blocked (no free external sandbox credentials available; adapters remain explicitly local simulations; see `docs/evidence/a08-sandbox-status.md`)
+- **A08** Commerce third-party integrations — Partial (environment-gated Stripe test, authenticated shipping, Resend email, and Supabase Storage adapters with timeout/retry/idempotency handling; local simulation remains default; provider credentials and live sandbox execution remain external)
 - **A09** Docker marketplace environment — Complete (Compose services, healthchecks, persistent volumes, and isolated verification script)
 - **A10** Git collaboration and reviews — Complete (protected main, PR workflow, CODEOWNERS, and review template)
 - **A11** Marketplace CI/CD — Partial (verified main run, GHCR publication, coverage artifacts, browser-E2E-gated publication, and gated SSH deployment; staging/production secrets remain external)

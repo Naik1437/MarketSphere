@@ -1,5 +1,4 @@
-// Pending external sandbox integration (Assessment 08).
-// This interface defines the contract; LocalStubPaymentProvider is a local-only stub.
+import { providerError, requestWithRetry } from "./http-client";
 
 export interface PaymentAuthRequest {
   orderId: string;
@@ -28,4 +27,29 @@ export class LocalStubPaymentProvider implements PaymentProvider {
   }
 }
 
-export const paymentProvider: PaymentProvider = new LocalStubPaymentProvider();
+export class StripeTestPaymentProvider implements PaymentProvider {
+  async authorize(req: PaymentAuthRequest): Promise<PaymentAuthResult> {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key || !key.startsWith("sk_test_")) throw new Error("STRIPE_SECRET_KEY must be a Stripe test-mode sk_test_ key");
+    const body = new URLSearchParams({
+      amount: String(Math.round(req.amount * 100)),
+      currency: req.currency.toLowerCase(),
+      "metadata[orderId]": req.orderId,
+      "payment_method_types[0]": "card",
+      confirm: "false",
+    });
+    const response = await requestWithRetry("https://api.stripe.com/v1/payment_intents", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": req.idempotencyKey },
+      body,
+    });
+    if (!response.ok) await providerError(response);
+    const result = (await response.json()) as { id: string; status: string };
+    const status = result.status === "succeeded" ? "CAPTURED" : result.status === "requires_capture" ? "AUTHORIZED" : "FAILED";
+    return { provider: "stripe", providerPaymentId: result.id, status };
+  }
+}
+
+export const paymentProvider: PaymentProvider = process.env.STRIPE_SECRET_KEY
+  ? new StripeTestPaymentProvider()
+  : new LocalStubPaymentProvider();
