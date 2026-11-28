@@ -85,3 +85,6 @@ The idempotent seed script (`apps/api/prisma/seed.ts`) initializes 7 demo accoun
 - `GET /api/v1/auth/me`
 - `GET /api/v1/auth/admin-check`, `GET /api/v1/auth/warehouse-check`, `GET /api/v1/auth/support-check`
 - `GET /api/v1/auth/sellers/:sellerId/scope`, `GET /api/v1/auth/customers/:customerId/scope`
+## Final assessment submission
+
+See `docs/FINAL_SUBMISSION_CHECKLIST.md` for the evidence map, external configuration blockers, and evaluator demonstration sequence. Runtime incident and restore claims require the CI `assessment-runtime-evidence` artifact; local simulation mode is not presented as external-provider success.

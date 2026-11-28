@@ -93,6 +93,9 @@
     { "name": "Order Return", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/<order-id>/returns" } },
     { "name": "Return Transition", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/returns/<return-id>/status" } },
     { "name": "Order Dispute", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/<order-id>/disputes" } },
-    { "name": "Dispute Transition", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/disputes/<dispute-id>/status" } }
+    { "name": "Dispute Transition", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/disputes/<dispute-id>/status" } },
+    { "name": "Recommendations", "request": { "method": "GET", "url": "{{pythonUrl}}/api/v1/recommendations" } },
+    { "name": "Update SKU", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/products/skus/<sku-id>" } },
+    { "name": "Create Promotion", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/promotions" } }
   ]
 }
