@@ -11,7 +11,19 @@
       "entrypoint": "src/vercel.ts",
       "installCommand": "npm ci --include=dev",
       "buildCommand": "npm run build",
-      "includeFiles": ["node_modules/**", "prisma/**"],
+      "includeFiles": [
+        "node_modules/@prisma/client/**",
+        "node_modules/.prisma/client/**",
+        "node_modules/bcryptjs/**",
+        "node_modules/bullmq/**",
+        "node_modules/cors/**",
+        "node_modules/express/**",
+        "node_modules/express-rate-limit/**",
+        "node_modules/ioredis/**",
+        "node_modules/jsonwebtoken/**",
+        "node_modules/zod/**",
+        "prisma/**"
+      ],
       "bindings": [
         {
           "type": "service",
