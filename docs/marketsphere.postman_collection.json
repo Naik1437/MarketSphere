@@ -6,7 +6,8 @@
   "variable": [
     { "key": "apiUrl", "value": "http://localhost:4000" },
     { "key": "pythonUrl", "value": "http://localhost:8000" },
-    { "key": "token", "value": "" }
+    { "key": "token", "value": "" },
+    { "key": "refreshToken", "value": "" }
   ],
   "item": [
     {
@@ -64,6 +65,34 @@
     { "name": "Promotions", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/promotions" } },
     { "name": "Admin Overview", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/admin/overview" } },
     { "name": "Seller Scope", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/auth/sellers/<seller-id>/scope" } },
-    { "name": "Metrics", "request": { "method": "GET", "url": "{{apiUrl}}/metrics" } }
+    { "name": "Metrics", "request": { "method": "GET", "url": "{{apiUrl}}/metrics" } },
+    { "name": "Refresh", "request": { "method": "POST", "url": "{{apiUrl}}/api/v1/auth/refresh", "body": { "mode": "raw", "raw": "{\"refreshToken\":\"{{refreshToken}}\"}" } } },
+    { "name": "Logout", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/auth/logout" } },
+    { "name": "Sellers", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/sellers" } },
+    { "name": "Seller Onboard", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/sellers/onboard" } },
+    { "name": "Seller Status", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/sellers/<seller-id>/status" } },
+    { "name": "Product Recommendations", "request": { "method": "GET", "url": "{{apiUrl}}/api/v1/products/recommendations" } },
+    { "name": "Add SKU", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/products/<product-id>/skus" } },
+    { "name": "My Products", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/products/mine" } },
+    { "name": "SKU Detail", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/products/skus/<sku-id>" } },
+    { "name": "Order Shipment", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/<order-id>/shipments" } },
+    { "name": "Shipment Transition", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/shipments/<shipment-id>/status" } },
+    { "name": "Refund", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/payments/<payment-id>/refunds" } },
+    { "name": "Generate Settlements", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/settlements/generate" } },
+    { "name": "Admin Check", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/auth/admin-check" } },
+    { "name": "Warehouse Check", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/auth/warehouse-check" } },
+    { "name": "Support Check", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/auth/support-check" } },
+    { "name": "Customer Scope", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/auth/customers/<customer-id>/scope" } },
+    { "name": "Seller Detail", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/sellers/<seller-id>" } },
+    { "name": "Seller Settlements", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/sellers/<seller-id>/settlements" } },
+    { "name": "Warehouse List", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/inventory/warehouses" } },
+    { "name": "Inventory Detail", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/inventory/<sku-id>" } },
+    { "name": "Cart Remove", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/cart/items/<sku-id>" } },
+    { "name": "Order Detail", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/<order-id>" } },
+    { "name": "Order Transition", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/<order-id>/status" } },
+    { "name": "Order Return", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/<order-id>/returns" } },
+    { "name": "Return Transition", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/returns/<return-id>/status" } },
+    { "name": "Order Dispute", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/orders/<order-id>/disputes" } },
+    { "name": "Dispute Transition", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{apiUrl}}/api/v1/disputes/<dispute-id>/status" } }
   ]
 }
