@@ -9,6 +9,8 @@
       "root": "apps/api",
       "framework": "express",
       "entrypoint": "src/vercel.ts",
+      "installCommand": "npm ci --include=dev",
+      "buildCommand": "npm run build",
       "bindings": [
         {
           "type": "service",
