@@ -8,7 +8,7 @@
     "api": {
       "root": "apps/api",
       "framework": "express",
-      "entrypoint": "src/vercel.ts",
+      "entrypoint": "dist/vercel.js",
       "installCommand": "npm ci --include=dev",
       "buildCommand": "npm run build",
       "bindings": [
